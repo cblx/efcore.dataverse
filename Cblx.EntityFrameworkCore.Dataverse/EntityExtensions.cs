@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Cblx.EntityFrameworkCore.Dataverse;
 
-internal static class EntityExtensions
+public static class EntityExtensions
 {
     public static void ToEntitySet(this EntityTypeBuilder entityType,
         string value) => entityType.Metadata.AddAnnotation("entitySetName", value);
@@ -15,13 +15,13 @@ internal static class EntityExtensions
     }
 
 
-    public static string GetEntitySetName(this IEntityType entityType)
+    internal static string GetEntitySetName(this IEntityType entityType)
         => entityType.FindAnnotation("entitySetName")?.Value?.ToString()
             ?? throw new InvalidOperationException($"EntitySetName not defined for {entityType.Name}");
 
 
    
-    public static string? GetODataBindPropertyName(this PropertyEntry property)
+    internal static string? GetODataBindPropertyName(this PropertyEntry property)
     {
         var value = property.Metadata.FindAnnotation("ODataBindPropertyName")?.Value?.ToString();
         return value;
