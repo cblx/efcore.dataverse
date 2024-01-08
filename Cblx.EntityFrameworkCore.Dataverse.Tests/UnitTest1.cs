@@ -8,15 +8,10 @@ public class UnitTest1
     {
         var thing = new Thing { Name = "Test" };
         await Create(thing);
-        //await Task.Delay(1000);
         await CheckState(thing);
-        //await Task.Delay(1000);
         await Update(thing);
-        //await Task.Delay(1000);
         await CheckState(thing);
-        //await Task.Delay(1000);
         await Delete(thing);
-        //await Task.Delay(1000);
         await CheckIsDeleted(thing);
     }
 
