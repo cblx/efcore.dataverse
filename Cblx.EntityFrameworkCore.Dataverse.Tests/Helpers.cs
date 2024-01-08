@@ -21,6 +21,8 @@ internal static class Helpers
                     .ClientSecret(config["ClientSecret"]!)
                     .ResourceUrl(config["ResourceUrl"]!)
                     .Authority(config["Authority"]!)
+                    .CommandTimeout(100)
+                    .HttpRequestTimeout(TimeSpan.FromSeconds(100))
             );
         });
         return services.BuildServiceProvider();

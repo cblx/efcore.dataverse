@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -146,16 +147,11 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options) /
         return request;
     }
 
-    private HttpClient CreateHttpClient()
+    public HttpClient CreateHttpClient()
     {
         var extension = options.FindExtension<DataverseOptionsExtension>();
-        var httpClient = new HttpClient(new DynamicsAuthorizationMessageHandler(extension!)
-        {
-            InnerHandler = new HttpClientHandler()
-        })
-        {
-            BaseAddress = new Uri($"{extension!.ResourceUrl}api/data/v9.2/")
-        };
+        var httpClientFactory = this.GetService<IHttpClientFactory>();
+        var httpClient = httpClientFactory!.CreateClient(extension!.HttpClientName!);
         return httpClient;
     }
 }

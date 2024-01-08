@@ -5,11 +5,15 @@ namespace Cblx.EntityFrameworkCore.Dataverse;
 
 public class DataverseOptionsExtension : IDbContextOptionsExtension
 {
+    public int? CommandTimeout { get; private set; }
+    public TimeSpan? HttpRequestTimeout { get; private set; }
     public string? ClientId { get; private set; }
     public string? ClientSecret { get; private set; }
     public string? ResourceUrl { get; private set; }
     public string? Host => ResourceUrl?.Replace("https://", "").Replace("/", "");
     public string? Authority { get; private set; }
+
+    internal string? HttpClientName => $"Cblx.EntityFrameworkCore.Dataverse|{ResourceUrl}";
 
     public DataverseOptionsExtension()
     {
@@ -54,6 +58,20 @@ public class DataverseOptionsExtension : IDbContextOptionsExtension
         return clone;
     }
 
+    public DataverseOptionsExtension WithCommandTimeout(int commandTimeout)
+    {
+        var clone = Clone();
+        clone.CommandTimeout = commandTimeout;
+        return clone;
+    }
+
+    public DataverseOptionsExtension WithHttpRequestTimeout(TimeSpan httpRequestTimeout)
+    {
+        var clone = Clone();
+        clone.HttpRequestTimeout = httpRequestTimeout;
+        return clone;
+    }
+
     private DataverseOptionsExtension Clone()
     {
         return new DataverseOptionsExtension(this);
@@ -61,7 +79,15 @@ public class DataverseOptionsExtension : IDbContextOptionsExtension
 
     public void ApplyServices(IServiceCollection services)
     {
-        // No services to apply
+        services.AddHttpClient(HttpClientName!, client =>
+        {
+            client.BaseAddress = new Uri($"{ResourceUrl}api/data/v9.2/");
+            if (HttpRequestTimeout.HasValue)
+            {
+                client.Timeout = HttpRequestTimeout.Value;
+            }
+            
+        }).AddHttpMessageHandler(sp => new DynamicsAuthorizationMessageHandler(this));
     }
 
     public void Validate(IDbContextOptions options)

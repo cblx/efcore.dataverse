@@ -15,7 +15,13 @@ public static class DataverseDbContextOptionsExtensions
         var connectionString = $"""
             Server={extension.Host}; Authentication=Active Directory Service Principal; Encrypt=True; User Id={extension.ClientId}; Password={extension.ClientSecret}
             """;
-        return optionsBuilder.UseSqlServer(connectionString);
+        return optionsBuilder.UseSqlServer(connectionString, sqlOptions =>
+        {
+            if (extension.CommandTimeout.HasValue)
+            {
+                sqlOptions.CommandTimeout(extension.CommandTimeout.Value);
+            }
+        });
     }
 
     private static DbContextOptionsBuilder ApplyConfiguration(

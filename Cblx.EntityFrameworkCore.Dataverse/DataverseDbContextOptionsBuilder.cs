@@ -17,6 +17,12 @@ public class DataverseDbContextOptionsBuilder(DbContextOptionsBuilder optionsBui
     public DataverseDbContextOptionsBuilder Authority(string authority)
         => WithOption(e => e.WithAuthority(authority));
 
+    public DataverseDbContextOptionsBuilder CommandTimeout(int commandTimeout)
+        => WithOption(e => e.WithCommandTimeout(commandTimeout));
+
+    public DataverseDbContextOptionsBuilder HttpRequestTimeout(TimeSpan httpRequestTimeout)
+        => WithOption(e => e.WithHttpRequestTimeout(httpRequestTimeout));
+
     private DataverseDbContextOptionsBuilder WithOption(Func<DataverseOptionsExtension, DataverseOptionsExtension> setAction)
     {
         var extension = optionsBuilder.Options.FindExtension<DataverseOptionsExtension>();
