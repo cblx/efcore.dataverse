@@ -12,8 +12,8 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options) /
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         if (!ChangeTracker.HasChanges()) { return 0; }
-        HttpClient httpClient = CreateHttpClient();
-        HttpRequestMessage request = CreateBatchRequest();
+        var httpClient = CreateHttpClient();
+        var request = CreateBatchRequest();
         var entries = ChangeTracker.Entries().ToArray();
         var batchContent = new MultipartContent("mixed", $"batch_{Guid.NewGuid()}");
         var changeSetContent = new MultipartContent("mixed", $"changeset_{Guid.NewGuid()}");
@@ -149,9 +149,9 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options) /
 
     public HttpClient CreateHttpClient()
     {
-        var extension = options.FindExtension<DataverseOptionsExtension>();
+        var extension = options.FindExtension<DataverseOptionsExtension>() ?? throw new InvalidOperationException("DataverseDbContextOptionsBuilder not used. Are you using 'UseSqlServer' instead of 'UseDataverse'?");
         var httpClientFactory = this.GetService<IHttpClientFactory>();
-        var httpClient = httpClientFactory!.CreateClient(extension!.HttpClientName!);
+        var httpClient = httpClientFactory!.CreateClient(extension.HttpClientName!);
         return httpClient;
     }
 }
