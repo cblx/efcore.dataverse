@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace Cblx.EntityFrameworkCore.Dataverse;
 
-public class DataverseDbContext(DbContextOptions options) : DbContext(options) // Yep, and what's the problem?
+public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 {
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -67,6 +67,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options) /
         sbContent.AppendLine("{");
         foreach (var property in properties)
         {
+            // Has a foreign key configured
             if (property.Metadata.IsForeignKey())
             {
                 var foreignEntitySetName = property.Metadata.GetContainingForeignKeys()
@@ -82,6 +83,27 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options) /
                 }
                 else
                 {
+                    sbContent.Append(
+                    $"""
+                        "{propName}@odata.bind": "{foreignEntitySetName}({property.CurrentValue})"
+                    """);
+                }
+            }
+            // No foreign key but has odatabind configuration
+            else if(property.GetODataBindPropertyName() is {} propName)
+            {
+                var foreignEntitySetName = property.GetForeignEntitySet() ?? 
+                    throw new InvalidOperationException($"ForeignEntitySet not defined for {property.Metadata.Name}. Use HasForeignEntitySet if a relationship is not defined with HasOne/WithMany");
+                if (property.CurrentValue is null)
+                {
+                    sbContent.Append(
+                    $"""
+                        "{propName}": null
+                    """);
+                }
+                else
+                {
+                    
                     sbContent.Append(
                     $"""
                         "{propName}@odata.bind": "{foreignEntitySetName}({property.CurrentValue})"

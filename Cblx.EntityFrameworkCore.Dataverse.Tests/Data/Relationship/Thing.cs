@@ -1,4 +1,4 @@
-﻿namespace Cblx.EntityFrameworkCore.Dataverse.Tests.Data.Default;
+﻿namespace Cblx.EntityFrameworkCore.Dataverse.Tests.Data.Relationship;
 
 [StronglyTypedId(Template.Guid, "guid-efcore")]
 public readonly partial struct ThingId { }

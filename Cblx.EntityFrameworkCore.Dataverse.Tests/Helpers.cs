@@ -1,35 +1,27 @@
 ﻿using Azure.Identity;
 using Cblx.EntityFrameworkCore.Dataverse.Tests.Data.Default;
+using Cblx.EntityFrameworkCore.Dataverse.Tests.Data.Relationship;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 namespace Cblx.EntityFrameworkCore.Dataverse.Tests;
 
 internal static class Helpers
 {
-    private static Lazy<IServiceProvider> _testEnv = new(() =>
+    public static DbContextOptionsBuilder<T> UseTestDataverse<T>(this DbContextOptionsBuilder<T> builder)
+        where T : DataverseDbContext
     {
-        var services = new ServiceCollection();
         var credential = new DefaultAzureCredential();
         var config = new ConfigurationBuilder()
             .AddAzureKeyVault(new Uri("https://efcoredataversetests.vault.azure.net/"), credential)
             .Build();
-        services.AddDbContext<DefaultTestContext>(options =>
-        {
-            options.UseDataverse(dataverse =>
-                dataverse
+        return (builder.UseDataverse(dataverse =>
+                   dataverse
                     .ClientId(config["ClientId"]!)
                     .ClientSecret(config["ClientSecret"]!)
                     .ResourceUrl(config["ResourceUrl"]!)
                     .Authority(config["Authority"]!)
                     .CommandTimeout(100)
                     .HttpRequestTimeout(TimeSpan.FromSeconds(100))
-            );
-        });
-        return services.BuildServiceProvider();
-    });
-
-    public static DefaultTestContext GetDefaultContext()
-    {
-        return _testEnv.Value.GetRequiredService<DefaultTestContext>();
+        ) as DbContextOptionsBuilder<T>)!;
     }
 }

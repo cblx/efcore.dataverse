@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace Cblx.EntityFrameworkCore.Dataverse.Tests.Data.Default;
+namespace Cblx.EntityFrameworkCore.Dataverse.Tests.Data.StrongRelationship;
 
 public class ThingConfiguration : IEntityTypeConfiguration<Thing>
 {
@@ -13,7 +13,8 @@ public class ThingConfiguration : IEntityTypeConfiguration<Thing>
         builder.Property(x => x.Id).HasColumnName("creec_thingid");
         builder.Property(x => x.Name).HasColumnName("new_name");
         builder.Property(x => x.ParentId).HasColumnName("creec_AscendentParent")
-                .HasODataBindPropertyName("creec_AscendentParent")
-                .HasForeignEntitySet("creec_things");
+                .HasODataBindPropertyName("creec_AscendentParent");
+        builder.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId);
+                
     }
 }
