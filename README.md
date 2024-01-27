@@ -2,7 +2,7 @@
 Extends SqlServer provider for Dataverse
 ---
 
-```
+```csharp
 public class DynamicsContext(DbContextOptions<DynamicsContext> options) : DataverseDbContext(options){
     ...
 }
@@ -29,5 +29,34 @@ To do so, it needs to know the entity set for write operations.
 ```csharp
 entityBuilder.ToTable("account");
 entityBuilder.ToEntitySet("accounts");
+```
+
+## HasODataBindPropertyName
+
+When the entity has a relationship, the lib needs to know what's the navigaiton name to update the FK property.
+
+Desired write body:
+
+```json
+{
+   "other_entity@odata.bind": "other_entities(<guid>)",
+   "etc": "other values"
+}
+```
+Configuring relationship
+```csharp
+entityBuilder.Property(x => x.OtherEntityId)
+             .HasColumnName("other_entity")
+             .HasODataBindPropertyName("other_entity");
+// The lib will infer the entity set configured for the other entity
+entityBuilder.HasOne(x => x.OtherEntity).WithMany().HasForeignKey(x => x.OtherEntityId);
+```
+### HasForeignEntitySet
+This is used when the FK has no correspondent Entity defined in them model:
+```csharp
+entityBuilder.Property(x => x.OtherEntityId)
+             .HasColumnName("other_entity")
+             .HasODataBindPropertyName("other_entity")
+             .HasForeignEntitySet("other_entities");
 ```
 
