@@ -19,6 +19,8 @@ services.AddDbContext<DynamicsContext>(options => options.UseDataverse(dataverse
 ---
 # Model Configuration
 
+For saving data, this libs needs to know more information about the entities, like the entity set name and the Dataverse navigation property name for relationships.
+
 ## ToEntitySet
 
 This library overrides SaveChangesAsync and perform a request to `$batch` Dataverse API endpoint for saving data.
