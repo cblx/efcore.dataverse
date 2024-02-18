@@ -1,10 +1,16 @@
-﻿namespace Cblx.EntityFrameworkCore.Dataverse.Tests.Data.StrongRelationship;
+﻿using Xunit.Abstractions;
 
-public class Tests
+namespace Cblx.EntityFrameworkCore.Dataverse.Tests.Data.StrongRelationship;
+
+public class Tests(ITestOutputHelper output)
 {
-    static TestContext CreateContext()
+    TestContext CreateContext()
     {
-        var options = new DbContextOptionsBuilder<TestContext>().UseTestDataverse().Options;
+        var options = new DbContextOptionsBuilder<TestContext>()
+            .UseTestDataverse()
+            .LogTo(output.WriteLine)
+            .EnableSensitiveDataLogging()
+            .Options;
         return new TestContext(options);
     }
 
@@ -32,14 +38,14 @@ public class Tests
         await CheckIfThingIsDeleted(thingId);
     }
 
-    private static async Task CheckIfThingIsDeleted(ThingId thingId)
+    private async Task CheckIfThingIsDeleted(ThingId thingId)
     {
         using var db = CreateContext();
         var thing = await db.Things.FindAsync(thingId);
         thing.Should().BeNull();
     }
 
-    private static async Task DeleteThing(ThingId thingId)
+    private async Task DeleteThing(ThingId thingId)
     {
         using var db = CreateContext();
         var thing = await db.Things.FindAsync(thingId);
@@ -47,14 +53,14 @@ public class Tests
         await db.SaveChangesAsync();
     }
 
-    private static async Task CheckIfChildThingIsDeleted(ThingId childThingId)
+    private async Task CheckIfChildThingIsDeleted(ThingId childThingId)
     {
         using var db = CreateContext();
         var childThing = await db.Things.FindAsync(childThingId);
         childThing.Should().BeNull();
     }
 
-    private static async Task DeleteChildThing(ThingId childThingId)
+    private async Task DeleteChildThing(ThingId childThingId)
     {
         using var db = CreateContext();
         var childThing = await db.Things.FindAsync(childThingId);
@@ -62,7 +68,7 @@ public class Tests
         await db.SaveChangesAsync();
     }
 
-    private static async Task CheckChildThingState(ThingId thingId, ThingId childThingId)
+    private async Task CheckChildThingState(ThingId thingId, ThingId childThingId)
     {
         using var db = CreateContext();
         var childThing = await db.Things.FindAsync(childThingId);
@@ -71,7 +77,7 @@ public class Tests
         childThing.ParentId.Should().Be(thingId);
     }
 
-    private static async Task<ThingId> CreateChildThing(ThingId thingId)
+    private async Task<ThingId> CreateChildThing(ThingId thingId)
     {
         ThingId childThingId;
         // Create a child thing
@@ -83,7 +89,7 @@ public class Tests
         return childThingId;
     }
 
-    private static async Task CheckThingStateAfterUpdate(ThingId thingId)
+    private async Task CheckThingStateAfterUpdate(ThingId thingId)
     {
         using var db = CreateContext();
         var thing = await db.Things.FindAsync(thingId);
@@ -91,7 +97,7 @@ public class Tests
         thing!.Name.Should().Be("Test2");
     }
 
-    private static async Task UpdateThing(ThingId thingId)
+    private async Task UpdateThing(ThingId thingId)
     {
         using var db = CreateContext();
         var thing = await db.Things.FindAsync(thingId);
@@ -99,7 +105,7 @@ public class Tests
         await db.SaveChangesAsync();
     }
 
-    private static async Task CheckThingState(ThingId thingId)
+    private async Task CheckThingState(ThingId thingId)
     {
         using var db = CreateContext();
         var thing = await db.Things.FindAsync(thingId);
@@ -107,7 +113,7 @@ public class Tests
         thing!.Name.Should().Be("Test");
     }
 
-    private static async Task<ThingId> CreateAThing()
+    private async Task<ThingId> CreateAThing()
     {
         var thing = new Thing { Name = "Test" };
         using var db = CreateContext();

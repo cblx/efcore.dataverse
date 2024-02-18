@@ -1,8 +1,5 @@
 ﻿using Azure.Identity;
-using Cblx.EntityFrameworkCore.Dataverse.Tests.Data.Default;
-using Cblx.EntityFrameworkCore.Dataverse.Tests.Data.Relationship;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 namespace Cblx.EntityFrameworkCore.Dataverse.Tests;
 
 internal static class Helpers
