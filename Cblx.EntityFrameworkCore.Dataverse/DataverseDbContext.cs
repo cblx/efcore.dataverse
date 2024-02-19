@@ -3,43 +3,22 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection.Metadata;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Cblx.EntityFrameworkCore.Dataverse;
-
-
-public class DataverseEventDefinition(ILoggingOptions loggingOptions, EventId eventId, LogLevel level, string eventIdCode) : EventDefinitionBase(
-    loggingOptions,
-    eventId,
-    level, eventIdCode
-    )
-{
-}
-
-public enum DataverseEventId
-{
-    CreatingBatchRequest = 83_001,
-    SendingBatchRequest = 83_002,
-    BatchRequestSucceeded = 83_003,
-    BatchRequestFailed = 83_004,
-    CreatingBatchRequestMessageContentItem = 83_101
-}
 
 public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 {
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        var logger = this.GetService<IDbContextLogger>();
         var loggingOptions = this.GetService<ILoggingOptions>();
         if (!ChangeTracker.HasChanges())
         {
             return 0;
         }
-
 
         var httpClient = CreateHttpClient();
         var request = CreateBatchRequest();
@@ -110,22 +89,35 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 
         batchContent.Add(changeSetContent);
         request.Content = batchContent;
-
-        try
+        var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
         {
-            var response = await httpClient.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            Log(DataverseEventId.BatchRequestSucceeded, $"Context '{GetType().Name}' successfully sent batch request for saving changes.");
-        }catch (Exception ex)
-        {
-            Log(DataverseEventId.BatchRequestFailed, $"Context '{GetType().Name}' failed to send batch request for saving changes. {ex.Message}");
-            throw;
+            Log(DataverseEventId.BatchRequestFailed, 
+                loggingOptions.IsSensitiveDataLoggingEnabled ?
+                $"""
+                '{GetType().Name}' batch request for saving changes has failed.
+                {await response.Content.ReadAsStringAsync(cancellationToken)}
+                """ : $"'{GetType().Name}' batch request for saving changes has failed.");
+            // We expect to receive just one error message for the first failed operation, read more:
+            // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/execute-batch-operations-using-web-api#handling-errors
+            var multiPartResponse = await response.Content.ReadAsMultipartAsync(cancellationToken);
+            var firstContent = multiPartResponse.Contents[0];
+            var firstPart = await firstContent.ReadAsMultipartAsync(cancellationToken);
+            var firstContentAsString = await firstPart.Contents[0].ReadAsStringAsync(cancellationToken);
+            firstContentAsString = firstContentAsString.Split("\r\n")[^1];
+            var json = JsonSerializer.Deserialize<JsonObject>(firstContentAsString);
+            // Ex: {"error":{"code":"0x80040237","message":"A record with matching key values already exists."}}
+            var message = json?["error"]?["message"]?.GetValue<string>() ?? "Unknown error | EFCore.Dataverse";
+            throw new DbUpdateException(message);
         }
-        //if (!response.IsSuccessStatusCode)
-        //{
-        //    var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        //    throw new InvalidOperationException(content);
-        //}
+        Log(DataverseEventId.BatchRequestSucceeded, 
+            loggingOptions.IsSensitiveDataLoggingEnabled ?
+            $"""
+            Context '{GetType().Name}' successfully completed batch request for saving changes.
+            {await response.Content.ReadAsStringAsync(cancellationToken)}
+            """ :
+            $"Context '{GetType().Name}' successfully completed batch request for saving changes."
+        );
         ChangeTracker.AcceptAllChanges();
         return -1;
     }
