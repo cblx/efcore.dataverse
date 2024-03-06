@@ -1,5 +1,9 @@
 # Cblx.EntityFrameworkCore.Dataverse
 Extends SqlServer provider for Dataverse
+
+![NuGet Version](https://img.shields.io/nuget/v/Cblx.EntityFrameworkCore.Dataverse)
+
+
 ---
 
 ```csharp
