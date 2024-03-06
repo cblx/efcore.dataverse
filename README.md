@@ -2,6 +2,8 @@
 Extends SqlServer provider for Dataverse
 
 ![NuGet Version](https://img.shields.io/nuget/v/Cblx.EntityFrameworkCore.Dataverse)
+![NuGet Downloads](https://img.shields.io/nuget/dt/Cblx.EntityFrameworkCore.Dataverse)
+
 
 
 ---
