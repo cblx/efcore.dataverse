@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -6,6 +7,13 @@ namespace Cblx.EntityFrameworkCore.Dataverse;
 
 public static class EntityExtensions
 {
+    /// <summary>
+    /// Configures the endpoint/entityset that the entity type maps to when saving to Dataverse.
+    /// If this is not set, the table name will be used to infer the entity set name, applying pluralization over it.
+    /// E.g. ToTable("contact") will map to "contacts" entity set.
+    /// </summary>
+    /// <param name="entityType"></param>
+    /// <param name="value"></param>
     public static void ToEntitySet(this EntityTypeBuilder entityType,
         string value) => entityType.Metadata.AddAnnotation("entitySetName", value);
 
@@ -67,7 +75,28 @@ public static class EntityExtensions
 
     internal static string GetEntitySetName(this IEntityType entityType)
         => entityType.FindAnnotation("entitySetName")?.Value?.ToString()
-            ?? throw new InvalidOperationException($"EntitySetName not defined for {entityType.Name}");
+            ?? Pluralize(
+                entityType.GetTableName() 
+                // I don't really know if GetTableName can return null values at this point.
+                // If it is possible, we should add a better explanation here, and how the user can fix it.
+                ?? throw new InvalidOperationException($"EntitySetName could not be resolved for {entityType.Name}.")
+            );
+
+    static string Pluralize(string name)
+    {
+        if (name.EndsWith('y'))
+        {
+            return name[..^1] + "ies";
+        }
+        else if (name.EndsWith('s'))
+        {
+            return name + "es";
+        }
+        else
+        {
+            return name + "s";
+        }
+    }
 
     internal static string? GetForeignEntitySet(this PropertyEntry property)
     {
