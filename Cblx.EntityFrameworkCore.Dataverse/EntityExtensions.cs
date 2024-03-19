@@ -8,11 +8,33 @@ public static class EntityExtensions
 {
     public static void ToEntitySet(this EntityTypeBuilder entityType,
         string value) => entityType.Metadata.AddAnnotation("entitySetName", value);
+
+    /// <summary>
+    /// Define the navigation name when saving this relationship through odata.bind attribute.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="property"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public static PropertyBuilder<T> HasODataBindPropertyName<T>(this PropertyBuilder<T> property, string value)
     {
         property.Metadata.AddAnnotation("ODataBindPropertyName", value);
         return property;
     }
+
+    /// <summary>
+    /// Define the navigation name when saving this relationship through odata.bind attribute.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="property"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    public static ComplexTypePropertyBuilder<T> HasODataBindPropertyName<T>(this ComplexTypePropertyBuilder<T> property, string value)
+    {
+        property.Metadata.AddAnnotation("ODataBindPropertyName", value);
+        return property;
+    }
+
     /// <summary>
     /// Defines the name of the foreign entity set.
     /// This is used together with <see cref="HasODataBindPropertyName{T}(PropertyBuilder{T}, string)"/>
@@ -23,6 +45,21 @@ public static class EntityExtensions
     /// <param name="value"></param>
     /// <returns></returns>
     public static PropertyBuilder<T> HasForeignEntitySet<T>(this PropertyBuilder<T> property, string value)
+    {
+        property.Metadata.AddAnnotation("ForeignEntitySet", value);
+        return property;
+    }
+
+    /// <summary>
+    /// Defines the name of the foreign entity set.
+    /// This is used together with <see cref="HasODataBindPropertyName{T}(PropertyBuilder{T}, string)"/>
+    /// when the foreign table is not defined in the model so a relationship cannot be set.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="property"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    public static ComplexTypePropertyBuilder<T> HasForeignEntitySet<T>(this ComplexTypePropertyBuilder<T> property, string value)
     {
         property.Metadata.AddAnnotation("ForeignEntitySet", value);
         return property;

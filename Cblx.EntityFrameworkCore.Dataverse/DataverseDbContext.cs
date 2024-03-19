@@ -44,8 +44,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var added = entries.Where(e => e.State == EntityState.Added).ToArray();
         foreach (var entry in added)
         {
-            var properties = entry
-                .Properties
+            var properties = GetPropertiesRecusively(entry)
                 .Where(p => p.CurrentValue != p.Metadata.GetDefaultValue())
                 .ToArray();
             var json = CreateJsonWithProperties(properties);
@@ -68,7 +67,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var modified = entries.Where(e => e.State == EntityState.Modified).ToArray();
         foreach (var entry in modified)
         {
-            var properties = entry.Properties.Where(p => p.IsModified).ToArray();
+            var properties = GetPropertiesRecusively(entry).Where(p => p.IsModified).ToArray();
             var json = CreateJsonWithProperties(properties);
             var httpMessageContent = CreateHttpMessageContent(
                 httpClient,
@@ -120,6 +119,20 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         );
         ChangeTracker.AcceptAllChanges();
         return -1;
+    }
+
+    private PropertyEntry[] GetPropertiesRecusively(EntityEntry entry)
+    {
+        var properties = entry.Properties.ToArray();
+        var innerProperties = entry.ComplexProperties.SelectMany(GetPropertiesRecusively).ToArray();
+        return [.. properties, .. innerProperties];
+    }
+
+    private PropertyEntry[] GetPropertiesRecusively(ComplexPropertyEntry entry)
+    {
+        var properties = entry.Properties.ToArray();
+        var innerProperties = entry.ComplexProperties.SelectMany(GetPropertiesRecusively).ToArray();
+        return [.. properties, .. innerProperties];
     }
 
     private void Log(DataverseEventId eventId, string message)
