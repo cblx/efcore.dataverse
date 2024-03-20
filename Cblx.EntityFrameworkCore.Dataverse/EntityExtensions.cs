@@ -75,29 +75,11 @@ public static class EntityExtensions
 
     internal static string GetEntitySetName(this IEntityType entityType)
         => entityType.FindAnnotation("entitySetName")?.Value?.ToString()
-            ?? Pluralize(
-                entityType.GetTableName() 
-                // I don't really know if GetTableName can return null values at this point.
-                // If it is possible, we should add a better explanation here, and how the user can fix it.
-                ?? throw new InvalidOperationException($"EntitySetName could not be resolved for {entityType.Name}.")
-            );
-
-    static string Pluralize(string name)
-    {
-        if (name.EndsWith('y'))
-        {
-            return name[..^1] + "ies";
-        }
-        else if (name.EndsWith('s'))
-        {
-            return name + "es";
-        }
-        else
-        {
-            return name + "s";
-        }
-    }
-
+            ?? entityType.GetTableName() 
+               // I don't really know if GetTableName can return null values at this point.
+               // If it is possible, we should add a better explanation here, and how the user can fix it.
+               ?? throw new InvalidOperationException($"EntitySetName could not be resolved for {entityType.Name}.");
+   
     internal static string? GetForeignEntitySet(this PropertyEntry property)
     {
         var value = property.Metadata.FindAnnotation("ForeignEntitySet")?.Value?.ToString();
