@@ -28,8 +28,7 @@ public class Tests
     private static async Task DeleteAsync(ThingId parentId)
     {
         using var db = CreateContext();
-        var parent = new Thing { Id = parentId };
-        db.Things.Attach(parent);
+        var parent = await db.Things.Where(t => t.Id == parentId).Include(t => t.Children).SingleAsync();
         db.Things.Remove(parent);
         await db.SaveChangesAsync();
     }
@@ -37,7 +36,7 @@ public class Tests
     private static async Task AssertDeletedAsync(ChildThingId childId)
     {
         using var db = CreateContext();
-        var child = await db.ChildThings.Where(t => t.Id == childId).SingleOrDefaultAsync();
+        var child = await db.ChildThings.Where(t => t.Id == childId).FirstOrDefaultAsync();
         child.Should().BeNull();
     }
 

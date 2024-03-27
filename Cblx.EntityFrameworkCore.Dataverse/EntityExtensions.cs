@@ -73,7 +73,7 @@ public static class EntityExtensions
         return property;
     }
 
-    internal static string GetEntitySetName(this IEntityType entityType)
+    public static string GetEntitySetName(this IEntityType entityType)
         => entityType.FindAnnotation("entitySetName")?.Value?.ToString()
             ?? entityType.GetTableName() 
                // I don't really know if GetTableName can return null values at this point.
