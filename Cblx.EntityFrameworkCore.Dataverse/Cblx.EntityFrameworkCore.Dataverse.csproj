@@ -24,10 +24,8 @@
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
 	</ItemGroup>
 	<ItemGroup>
-		<!-- 
-			This package is necessary for having HttpMessageContent 
-			https://github.com/dotnet/runtime/issues/17353 -->
-		<PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0" PrivateAssets="compile" />
+		<!-- We have copied necessary code from this package, for working with multipart content -->
+		<!--<PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0" PrivateAssets="compile" />-->
 		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.3" />
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.60.0" />
 	</ItemGroup>
