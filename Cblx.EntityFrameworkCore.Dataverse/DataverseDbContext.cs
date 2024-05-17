@@ -203,7 +203,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
             {
                 sbContent.Append(
                 $"""
-                    "{property.Metadata.GetColumnName()}": {JsonSerializer.Serialize(property.CurrentValue)}
+                    "{property.Metadata.GetColumnName()}": {JsonSerializer.Serialize(property.GetCurrentConvertedValue())}
                 """);
             }
             if (property != properties[^1])

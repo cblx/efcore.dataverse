@@ -85,6 +85,16 @@ public static class EntityExtensions
         var value = property.Metadata.FindAnnotation("ForeignEntitySet")?.Value?.ToString();
         return value;
     }
+
+    internal static object? GetCurrentConvertedValue(this PropertyEntry property)
+    {
+        var converter = property.Metadata.GetValueConverter();
+        if(converter is null)
+        {
+            return property.CurrentValue;
+        }
+        return converter.ConvertToProvider(property.CurrentValue);
+    }
    
     internal static string? GetODataBindPropertyName(this PropertyEntry property)
     {

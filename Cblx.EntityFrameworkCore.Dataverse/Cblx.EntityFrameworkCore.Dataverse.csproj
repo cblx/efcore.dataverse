@@ -24,9 +24,11 @@
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
 	</ItemGroup>
 	<ItemGroup>
-		<!-- We have copied necessary code from this package, for working with multipart content -->
-		<!--<PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0" PrivateAssets="compile" />-->
 		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.3" />
+		<!-- Don't remeber the reason for this explicit reference. 
+		 This ones already exists in EFCore but with a lower version:
+		 Microsoft.EntityFrameworkCore.SqlServer (8.0.3) > Microsoft.Data.SqlClient (5.1.5) > Azure.Identity (1.10.3) > Microsoft.Identity.Client (4.56.0) -->
+		 
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.60.0" />
 	</ItemGroup>
 
