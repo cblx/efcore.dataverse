@@ -2,5 +2,5 @@
 
 internal interface IDataverseValueConverter
 {
-    Func<object?, object?> ConvertToDataverseWebApi { get; }
+    internal Func<object?, object?> ConvertToDataverseWebApi { get; }
 }

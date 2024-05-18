@@ -3,24 +3,18 @@ using System.Linq.Expressions;
 
 namespace Cblx.EntityFrameworkCore.Dataverse;
 
-public class DataverseValueConverter<TModel, TProvider, TDataverseWebApi> : ValueConverter<TModel, TProvider>, IDataverseValueConverter
+public class DataverseValueConverter<TModel, TProvider> : ValueConverter<TModel, TProvider>, IDataverseValueConverter
 {
     public DataverseValueConverter(
         Expression<Func<TModel, TProvider>> convertToProviderExpression,
         Expression<Func<TProvider, TModel>> convertFromProviderExpression,
-        Expression<Func<TModel, TDataverseWebApi>> convertToDataverseWebApiExpression,
+        Func<object?, object?> convertToDataverseWebApi,
         ConverterMappingHints? mappingHints = null) : base(convertToProviderExpression, 
                                                            convertFromProviderExpression, 
                                                            mappingHints)
     {
-        ConvertToDataverseWebApiExpression = convertToDataverseWebApiExpression;
+        ConvertToDataverseWebApi = convertToDataverseWebApi;
     }
 
-    public Expression<Func<TModel, TDataverseWebApi>> ConvertToDataverseWebApiExpression { get; set; }
-    public Func<object?, object?> ConvertToDataverseWebApi =>
-        (object? from) =>
-        {
-            var typedFunc = ConvertToDataverseWebApiExpression.Compile();
-            return typedFunc((TModel)from!);
-        };
+    public Func<object?, object?> ConvertToDataverseWebApi { get; }
 }
