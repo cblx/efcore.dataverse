@@ -86,12 +86,16 @@ public static class EntityExtensions
         return value;
     }
 
-    internal static object? GetCurrentConvertedValue(this PropertyEntry property)
+    internal static object? GetCurrentConvertedValueForWrite(this PropertyEntry property)
     {
         var converter = property.Metadata.GetValueConverter();
         if(converter is null)
         {
             return property.CurrentValue;
+        }
+        if(converter is IDataverseValueConverter dataverseConverter)
+        {
+            return dataverseConverter.ConvertToDataverseWebApi(property.CurrentValue);
         }
         return converter.ConvertToProvider(property.CurrentValue);
     }
