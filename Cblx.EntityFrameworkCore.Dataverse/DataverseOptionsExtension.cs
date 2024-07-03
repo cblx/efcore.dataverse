@@ -17,7 +17,7 @@ public class DataverseOptionsExtension : IDbContextOptionsExtension
 
     public DataverseOptionsExtension()
     {
-
+        
     }
 
     public DataverseOptionsExtension(DataverseOptionsExtension copyFrom)
@@ -76,7 +76,7 @@ public class DataverseOptionsExtension : IDbContextOptionsExtension
     {
         return new DataverseOptionsExtension(this);
     }
-
+    
     public void ApplyServices(IServiceCollection services)
     {
         services.AddHttpClient(HttpClientName!, client =>
@@ -97,11 +97,22 @@ public class DataverseOptionsExtension : IDbContextOptionsExtension
 
     class ExtensionInfo(IDbContextOptionsExtension extension) : DbContextOptionsExtensionInfo(extension)
     {
+        private new DataverseOptionsExtension Extension
+         => (DataverseOptionsExtension)base.Extension;
+
         public override bool IsDatabaseProvider => false;
 
         public override string LogFragment => "Dataverse log fragment";
 
-        public override int GetServiceProviderHashCode() => 0;
+        public override int GetServiceProviderHashCode()
+        {
+            var hashCode = new HashCode();
+            hashCode.Add(Extension.ClientId);
+            hashCode.Add(Extension.ClientSecret);
+            hashCode.Add(Extension.ResourceUrl);
+            hashCode.Add(Extension.Authority);
+            return hashCode.ToHashCode();
+        }
 
         public override void PopulateDebugInfo(IDictionary<string, string> debugInfo)
         {

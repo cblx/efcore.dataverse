@@ -97,17 +97,26 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 '{GetType().Name}' batch request for saving changes has failed.
                 {await response.Content.ReadAsStringAsync(cancellationToken)}
                 """ : $"'{GetType().Name}' batch request for saving changes has failed.");
-            // We expect to receive just one error message for the first failed operation, read more:
-            // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/execute-batch-operations-using-web-api#handling-errors
-            var multiPartResponse = await response.Content.ReadAsMultipartAsync(cancellationToken);
-            var firstContent = multiPartResponse.Contents[0];
-            var firstPart = await firstContent.ReadAsMultipartAsync(cancellationToken);
-            var firstContentAsString = await firstPart.Contents[0].ReadAsStringAsync(cancellationToken);
-            firstContentAsString = firstContentAsString.Split("\r\n")[^1];
-            var json = JsonSerializer.Deserialize<JsonObject>(firstContentAsString);
-            // Ex: {"error":{"code":"0x80040237","message":"A record with matching key values already exists."}}
-            var message = json?["error"]?["message"]?.GetValue<string>() ?? "Unknown error | EFCore.Dataverse";
-            throw new DbUpdateException(message);
+           
+            try
+            {
+                // We expect to receive just one error message for the first failed operation, read more:
+                // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/execute-batch-operations-using-web-api#handling-errors
+                var multiPartResponse = await response.Content.ReadAsMultipartAsync(cancellationToken);
+                var firstContent = multiPartResponse.Contents[0];
+                var firstPart = await firstContent.ReadAsMultipartAsync(cancellationToken);
+                var firstContentAsString = await firstPart.Contents[0].ReadAsStringAsync(cancellationToken);
+                firstContentAsString = firstContentAsString.Split("\r\n")[^1];
+                var json = JsonSerializer.Deserialize<JsonObject>(firstContentAsString);
+                // Ex: {"error":{"code":"0x80040237","message":"A record with matching key values already exists."}}
+                var message = json?["error"]?["message"]?.GetValue<string>() ?? "Unknown error | EFCore.Dataverse";
+                throw new DbUpdateException(message);
+            }
+            catch
+            {
+                var errorMessage = await response.Content.ReadAsStringAsync(cancellationToken);
+                throw new DbUpdateException(errorMessage);
+            }
         }
         Log(DataverseEventId.BatchRequestSucceeded, 
             loggingOptions.IsSensitiveDataLoggingEnabled ?
