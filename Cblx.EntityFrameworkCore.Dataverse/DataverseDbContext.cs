@@ -97,7 +97,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 '{GetType().Name}' batch request for saving changes has failed.
                 {await response.Content.ReadAsStringAsync(cancellationToken)}
                 """ : $"'{GetType().Name}' batch request for saving changes has failed.");
-           
+            string message;
             try
             {
                 // We expect to receive just one error message for the first failed operation, read more:
@@ -109,14 +109,13 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 firstContentAsString = firstContentAsString.Split("\r\n")[^1];
                 var json = JsonSerializer.Deserialize<JsonObject>(firstContentAsString);
                 // Ex: {"error":{"code":"0x80040237","message":"A record with matching key values already exists."}}
-                var message = json?["error"]?["message"]?.GetValue<string>() ?? "Unknown error | EFCore.Dataverse";
-                throw new DbUpdateException(message);
+                message = json?["error"]?["message"]?.GetValue<string>() ?? "Unknown error | EFCore.Dataverse";
             }
             catch
             {
-                var errorMessage = await response.Content.ReadAsStringAsync(cancellationToken);
-                throw new DbUpdateException(errorMessage);
+                message = await response.Content.ReadAsStringAsync(cancellationToken);
             }
+            throw new DbUpdateException(message);
         }
         Log(DataverseEventId.BatchRequestSucceeded, 
             loggingOptions.IsSensitiveDataLoggingEnabled ?
