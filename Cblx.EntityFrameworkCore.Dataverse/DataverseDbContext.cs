@@ -46,6 +46,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         {
             var properties = GetPropertiesRecusively(entry)
                 .Where(p => p.CurrentValue != p.Metadata.GetDefaultValue())
+                .Where(p => !p.IsDataverseReadOnly())
                 .ToArray();
             var json = CreateJsonWithProperties(properties);
             var httpMessageContent = CreateHttpMessageContent(
@@ -67,7 +68,10 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var modified = entries.Where(e => e.State == EntityState.Modified).ToArray();
         foreach (var entry in modified)
         {
-            var properties = GetPropertiesRecusively(entry).Where(p => p.IsModified).ToArray();
+            var properties = GetPropertiesRecusively(entry)
+                .Where(p => p.IsModified)
+                .Where(p => !p.IsDataverseReadOnly())
+                .ToArray();
             var json = CreateJsonWithProperties(properties);
             var httpMessageContent = CreateHttpMessageContent(
                 httpClient,

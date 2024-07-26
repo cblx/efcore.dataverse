@@ -44,6 +44,30 @@ public static class EntityExtensions
     }
 
     /// <summary>
+    /// Define that this property should be ignored when saving to Dataverse.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="property"></param>
+    /// <returns></returns>
+    public static PropertyBuilder<T> IsDataverseReadOnly<T>(this PropertyBuilder<T> property)
+    {
+        property.Metadata.AddAnnotation("IsDataverseReadOnly", true);
+        return property;
+    }
+
+    /// <summary>
+    /// Define that this property should be ignored when saving to Dataverse.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="property"></param>
+    /// <returns></returns>
+    public static ComplexTypePropertyBuilder<T> IsDataverseReadOnly<T>(this ComplexTypePropertyBuilder<T> property)
+    {
+        property.Metadata.AddAnnotation("IsDataverseReadOnly", true);
+        return property;
+    }
+
+    /// <summary>
     /// Defines the name of the foreign entity set.
     /// This is used together with <see cref="HasODataBindPropertyName{T}(PropertyBuilder{T}, string)"/>
     /// when the foreign table is not defined in the model so a relationship cannot be set.
@@ -104,5 +128,11 @@ public static class EntityExtensions
     {
         var value = property.Metadata.FindAnnotation("ODataBindPropertyName")?.Value?.ToString();
         return value;
+    }
+
+    internal static bool IsDataverseReadOnly(this PropertyEntry property)
+    {
+        var value = property.Metadata.FindAnnotation("IsDataverseReadOnly")?.Value;
+        return value is bool b && b;
     }
 }
