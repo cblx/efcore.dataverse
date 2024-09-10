@@ -66,3 +66,10 @@ entityBuilder.Property(x => x.OtherEntityId)
              .HasForeignEntitySet("other_entities");
 ```
 
+## GetOptionsAsync
+
+Gettinge choice options for a property
+
+```
+db.Entities.GetOptionsAsync(e => e.ChoiceProperty);
+```

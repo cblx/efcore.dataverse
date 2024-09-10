@@ -5,7 +5,12 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Cblx.EntityFrameworkCore.Dataverse", "Cblx.EntityFrameworkCore.Dataverse\Cblx.EntityFrameworkCore.Dataverse.csproj", "{FCD4197D-F569-4495-8075-3BB7F9F4A5B4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cblx.EntityFrameworkCore.Dataverse.Tests", "Cblx.EntityFrameworkCore.Dataverse.Tests\Cblx.EntityFrameworkCore.Dataverse.Tests.csproj", "{ABF8E827-43EA-4E43-9022-47271DCD4B73}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Cblx.EntityFrameworkCore.Dataverse.Tests", "Cblx.EntityFrameworkCore.Dataverse.Tests\Cblx.EntityFrameworkCore.Dataverse.Tests.csproj", "{ABF8E827-43EA-4E43-9022-47271DCD4B73}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "globals", "globals", "{FD182171-BA3A-4D79-B2A6-8E69ED56F90B}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
