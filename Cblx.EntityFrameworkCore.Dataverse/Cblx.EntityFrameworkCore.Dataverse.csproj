@@ -29,7 +29,7 @@
 		 This ones already exists in EFCore but with a lower version:
 		 Microsoft.EntityFrameworkCore.SqlServer (8.0.3) > Microsoft.Data.SqlClient (5.1.5) > Azure.Identity (1.10.3) > Microsoft.Identity.Client (4.56.0) -->
 		 
-		<PackageReference Include="Microsoft.Identity.Client" Version="4.60.0" />
+		<PackageReference Include="Microsoft.Identity.Client" Version="4.66.1" />
 	</ItemGroup>
 
 </Project>
