@@ -183,7 +183,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
             httpMessageContent.Headers.Add("Content-ID", contentId++.ToString());
             var json = $$"""
                 {
-                    "@odata.id": "{{rightEntitySet}}({{rightKeyValue}})"
+                    "@odata.id": "{{httpClient.BaseAddress}}{{rightEntitySet}}({{rightKeyValue}})"
                 }
                 """;
             httpRequestMessage.Content = new StringContent(json, Encoding.UTF8, "application/json");
