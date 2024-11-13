@@ -66,7 +66,7 @@ entityBuilder.Property(x => x.OtherEntityId)
              .HasForeignEntitySet("other_entities");
 ```
 
-## Many-to-many Dataverse
+### Many-to-many Dataverse relationship
 
 ```csharp
    builder.HasMany(e => e.Others)
