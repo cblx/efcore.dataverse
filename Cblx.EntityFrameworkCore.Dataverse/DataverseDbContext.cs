@@ -12,74 +12,31 @@ namespace Cblx.EntityFrameworkCore.Dataverse;
 
 public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 {
+   
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var loggingOptions = this.GetService<ILoggingOptions>();
-        if (!ChangeTracker.HasChanges())
-        {
-            return 0;
-        }
-
-        var httpClient = CreateHttpClient();
-        var request = CreateBatchRequest();
-        var entries = ChangeTracker.Entries().ToArray();
-        var batchContent = new MultipartContent("mixed", $"batch_{Guid.NewGuid()}");
-        var changeSetContent = new MultipartContent("mixed", $"changeset_{Guid.NewGuid()}");
-        var deleted = entries.Where(e => e.State == EntityState.Deleted).ToArray();
-        int contentId = 0;
-        Log(DataverseEventId.CreatingBatchRequest, $"Context '{GetType().Name}' started creating batch request for saving changes.");
-        foreach (var entry in deleted)
-        {
-            var httpMessageContent = CreateHttpMessageContent(httpClient, HttpMethod.Delete, contentId++, entry);
-            changeSetContent.Add(httpMessageContent);
-            Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
-               loggingOptions.IsSensitiveDataLoggingEnabled ?
-               $"""
+        var request = CreateBatchRequestMessage(
+            out var httpClient,
+            onStart: () => Log(DataverseEventId.CreatingBatchRequest, $"Context '{GetType().Name}' started creating batch request for saving changes."),
+            onDeletedContentCreated: (entry, httpMessageContent) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
+                loggingOptions.IsSensitiveDataLoggingEnabled ?
+                $"""
                 '{GetType().Name}' created a request message content for deleting a '{entry.Metadata.ShortName()}' entity.
                 {httpMessageContent.HttpRequestMessage.Method} {httpMessageContent.HttpRequestMessage.RequestUri}
                 """ :
-               $"'{GetType().Name}' created a request message content for deleting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
-            );
-        }
-        var added = entries.Where(e => e.State == EntityState.Added).ToArray();
-        foreach (var entry in added)
-        {
-            var properties = GetPropertiesRecusively(entry)
-                .Where(p => p.CurrentValue != p.Metadata.GetDefaultValue())
-                .Where(p => !p.IsDataverseReadOnly())
-                .ToArray();
-            var json = CreateJsonWithProperties(properties);
-            var httpMessageContent = CreateHttpMessageContent(
-                httpClient,
-                HttpMethod.Post,
-                contentId++,
-                entry, json);
-            changeSetContent.Add(httpMessageContent);
-            Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
-               loggingOptions.IsSensitiveDataLoggingEnabled ?
-               $"""
+                $"'{GetType().Name}' created a request message content for deleting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
+            ),
+            onAddedContentCreated: (entry, httpMessageContent, json) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
+                loggingOptions.IsSensitiveDataLoggingEnabled ?
+                $"""
                 '{GetType().Name}' created a request message content for inserting a '{entry.Metadata.ShortName()}' entity.
                 {httpMessageContent.HttpRequestMessage.Method} {httpMessageContent.HttpRequestMessage.RequestUri}
                 {json}
                 """ :
-               $"'{GetType().Name}' created a request message content for inserting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
-            );
-        }
-        var modified = entries.Where(e => e.State == EntityState.Modified).ToArray();
-        foreach (var entry in modified)
-        {
-            var properties = GetPropertiesRecusively(entry)
-                .Where(p => p.IsModified)
-                .Where(p => !p.IsDataverseReadOnly())
-                .ToArray();
-            var json = CreateJsonWithProperties(properties);
-            var httpMessageContent = CreateHttpMessageContent(
-                httpClient,
-                HttpMethod.Patch,
-                contentId++,
-                entry, json);
-            changeSetContent.Add(httpMessageContent);
-            Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
+                $"'{GetType().Name}' created a request message content for inserting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
+            ),
+            onModifiedContentCreated: (entry, httpMessageContent, json) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
                 loggingOptions.IsSensitiveDataLoggingEnabled ?
                 $"""
                 '{GetType().Name}' created a request message content for updating a '{entry.Metadata.ShortName()}' entity.
@@ -87,12 +44,10 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 {json}
                 """ :
                 $"'{GetType().Name}' created a request message content for updating a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
-            );
-        }
-
-        batchContent.Add(changeSetContent);
-        request.Content = batchContent;
-        var response = await httpClient.SendAsync(request, cancellationToken);
+            )
+        );
+        if(request == null) { return 0; }
+        var response = await httpClient!.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             Log(DataverseEventId.BatchRequestFailed, 
@@ -132,6 +87,162 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         ChangeTracker.AcceptAllChanges();
         return -1;
     }
+
+    /// <summary>
+    /// Currently used internally for testing
+    /// </summary>
+    /// <returns></returns>
+    internal async Task<string> GetBatchCommandForAssertionAsync()
+    {
+        var request = CreateBatchRequestMessage(out var _, guidCreator: () => Guid.Empty);
+        if (request == null) { return ""; }
+        return await request.Content!.ReadAsStringAsync();
+    }
+
+    private HttpRequestMessage? CreateBatchRequestMessage(
+        out HttpClient? httpClient,
+        Action? onStart = null,
+        Action<EntityEntry, HttpMessageContent>? onDeletedContentCreated = null,
+        Action<EntityEntry, HttpMessageContent, string>? onAddedContentCreated = null,
+        Action<EntityEntry, HttpMessageContent, string>? onModifiedContentCreated = null,
+        Func<Guid>? guidCreator = null)
+    {
+        guidCreator ??= Guid.NewGuid;
+        if (!ChangeTracker.HasChanges())
+        {
+            httpClient = null;
+            return null;
+        }
+
+        httpClient = CreateHttpClient();
+        var request = CreateBatchRequest();
+        var entries = ChangeTracker.Entries().ToArray();
+        var batchContent = new MultipartContent("mixed", $"batch_{guidCreator()}");
+        var changeSetContent = new MultipartContent("mixed", $"changeset_{guidCreator()}");
+        var deleted = entries.Where(e => e.State == EntityState.Deleted).ToArray();
+        int contentId = 0;
+        onStart?.Invoke();
+        var deletedManyToManyRelationships = deleted.Where(d => d.Metadata.IsManyToManyJoinEntity()).ToArray();
+        foreach (var deletedRelationship in deletedManyToManyRelationships)
+        {
+            var manyToManyRelationshipData = deletedRelationship.Metadata.GetManyToManyEntityData() ??
+               throw new InvalidOperationException("ManyToManyEntityData not found.");
+            var leftEntityType = Model.GetEntityTypes().First(entity => entity.ClrType == manyToManyRelationshipData.LeftEntityType);
+            var leftKeyValue = deletedRelationship.Property(manyToManyRelationshipData.LeftForeignKey).CurrentValue;
+            var leftEntitySet = leftEntityType.GetEntitySetName();
+            var rightKeyValue = deletedRelationship.Property(manyToManyRelationshipData.RightForeignKey).CurrentValue;
+            var path = $"{httpClient.BaseAddress}{leftEntitySet}({leftKeyValue})/{manyToManyRelationshipData.NavigationFromLeft}({rightKeyValue})/$ref";
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Delete, path);
+            var httpMessageContent = new HttpMessageContent(httpRequestMessage);
+            httpMessageContent.Headers.ContentType = new MediaTypeHeaderValue("application/http");
+            httpMessageContent.Headers.Add("Content-Transfer-Encoding", "binary");
+            httpMessageContent.Headers.Add("Content-ID", contentId++.ToString());
+            changeSetContent.Add(httpMessageContent);
+            onDeletedContentCreated?.Invoke(deletedRelationship, httpMessageContent);
+        }
+        deleted = deleted.Except(deletedManyToManyRelationships).ToArray();
+        foreach (var entry in deleted)
+        {
+            var httpMessageContent = CreateHttpMessageContent(httpClient, HttpMethod.Delete, contentId++, entry);
+            changeSetContent.Add(httpMessageContent);
+            onDeletedContentCreated?.Invoke(entry, httpMessageContent);
+        }
+        var added = entries.Where(e => e.State == EntityState.Added).ToArray();
+        var addedManyToManyRelationships = added.Where(d => d.Metadata.IsManyToManyJoinEntity()).ToArray();
+        added = added.Except(addedManyToManyRelationships).ToArray();
+        foreach (var entry in added)
+        {
+            var properties = GetPropertiesRecusively(entry)
+                .Where(p => p.CurrentValue != p.Metadata.GetDefaultValue())
+                .Where(p => !p.IsDataverseReadOnly())
+                .ToArray();
+            var json = CreateJsonWithProperties(properties);
+            var httpMessageContent = CreateHttpMessageContent(
+                httpClient,
+                HttpMethod.Post,
+                contentId++,
+                entry, json);
+            changeSetContent.Add(httpMessageContent);
+            onAddedContentCreated?.Invoke(entry, httpMessageContent, json);
+        }
+        foreach (var addedRelationship in addedManyToManyRelationships)
+        {
+            var manyToManyRelationshipData = addedRelationship.Metadata.GetManyToManyEntityData() ??
+                throw new InvalidOperationException("ManyToManyEntityData not found.");
+            var leftEntityType = Model.GetEntityTypes().First(entity => entity.ClrType == manyToManyRelationshipData.LeftEntityType);
+            var leftKeyValue = addedRelationship.Property(manyToManyRelationshipData.LeftForeignKey).CurrentValue;
+            var leftEntitySet = leftEntityType.GetEntitySetName();
+            var rightEntityType = Model.GetEntityTypes().First(entity => entity.ClrType == manyToManyRelationshipData.RightEntityType);
+            var rightKeyValue = addedRelationship.Property(manyToManyRelationshipData.RightForeignKey).CurrentValue;
+            var rightEntitySet = rightEntityType.GetEntitySetName();
+            var path = $"{httpClient.BaseAddress}{leftEntitySet}({leftKeyValue})/{manyToManyRelationshipData.NavigationFromLeft}/$ref";
+            var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, path);
+            var httpMessageContent = new HttpMessageContent(httpRequestMessage);
+            httpMessageContent.Headers.ContentType = new MediaTypeHeaderValue("application/http");
+            httpMessageContent.Headers.Add("Content-Transfer-Encoding", "binary");
+            httpMessageContent.Headers.Add("Content-ID", contentId++.ToString());
+            var json = $$"""
+                {
+                    "@odata.id": "{{rightEntitySet}}({{rightKeyValue}})"
+                }
+                """;
+            httpRequestMessage.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            changeSetContent.Add(httpMessageContent);
+            onAddedContentCreated?.Invoke(addedRelationship, httpMessageContent, json);
+        }
+        var modified = entries.Where(e => e.State == EntityState.Modified).ToArray();
+        foreach (var entry in modified)
+        {
+            var properties = GetPropertiesRecusively(entry)
+                .Where(p => p.IsModified)
+                .Where(p => !p.IsDataverseReadOnly())
+                .ToArray();
+            var json = CreateJsonWithProperties(properties);
+            var httpMessageContent = CreateHttpMessageContent(
+                httpClient,
+                HttpMethod.Patch,
+                contentId++,
+                entry, json);
+            changeSetContent.Add(httpMessageContent);
+            onModifiedContentCreated?.Invoke(entry, httpMessageContent, json);
+        }
+
+        batchContent.Add(changeSetContent);
+        request.Content = batchContent;
+        return request;
+    }
+
+    private static HttpMessageContent CreateHttpMessageContent(
+       HttpClient httpClient,
+       HttpMethod httpMethod,
+       int contentId,
+       EntityEntry entry,
+       string? content = null
+       )
+    {
+        var primeryKeyProperty = entry.Metadata.FindPrimaryKey()!.Properties[0];
+        var primaryKeyValue = entry.Property(primeryKeyProperty).CurrentValue;
+        var identificationPart = httpMethod == HttpMethod.Post
+            ? string.Empty
+            : $"({primaryKeyValue})";
+
+        var httpRequestMessage = new HttpRequestMessage(
+            httpMethod,
+            $"{httpClient.BaseAddress}{entry.Metadata.GetEntitySetName()}{identificationPart}"
+        );
+        var httpMessageContent = new HttpMessageContent(httpRequestMessage);
+        httpMessageContent.Headers.ContentType = new MediaTypeHeaderValue("application/http");
+        httpMessageContent.Headers.Add("Content-Transfer-Encoding", "binary");
+        httpMessageContent.Headers.Add("Content-ID", contentId.ToString());
+        if (content == null) { return httpMessageContent; }
+        httpRequestMessage.Content = new StringContent(
+            content,
+            Encoding.UTF8,
+            "application/json");
+        return httpMessageContent;
+    }
+
+
 
     private PropertyEntry[] GetPropertiesRecusively(EntityEntry entry)
     {
@@ -231,36 +342,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         return sbContent.ToString();
     }
 
-    private static HttpMessageContent CreateHttpMessageContent(
-        HttpClient httpClient,
-        HttpMethod httpMethod,
-        int contentId,
-        EntityEntry entry,
-        string? content = null
-        )
-    {
-        var primeryKeyProperty = entry.Metadata.FindPrimaryKey()!.Properties[0];
-        var primaryKeyValue = entry.Property(primeryKeyProperty).CurrentValue;
-        var identificationPart = httpMethod == HttpMethod.Post
-            ? string.Empty
-            : $"({primaryKeyValue})";
-
-        var httpRequestMessage = new HttpRequestMessage(
-            httpMethod,
-            $"{httpClient.BaseAddress}{entry.Metadata.GetEntitySetName()}{identificationPart}"
-        );
-        var httpMessageContent = new HttpMessageContent(httpRequestMessage);
-        httpMessageContent.Headers.ContentType = new MediaTypeHeaderValue("application/http");
-        httpMessageContent.Headers.Add("Content-Transfer-Encoding", "binary");
-        httpMessageContent.Headers.Add("Content-ID", contentId.ToString());
-        if (content == null) { return httpMessageContent; }
-        httpRequestMessage.Content = new StringContent(
-            content,
-            Encoding.UTF8,
-            "application/json");
-        return httpMessageContent;
-    }
-
+   
     private static HttpRequestMessage CreateBatchRequest()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "$batch");
