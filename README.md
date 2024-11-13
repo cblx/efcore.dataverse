@@ -66,6 +66,18 @@ entityBuilder.Property(x => x.OtherEntityId)
              .HasForeignEntitySet("other_entities");
 ```
 
+### Many-to-many Dataverse relationship
+
+```csharp
+   builder.HasMany(e => e.Others)
+       .WithMany()
+       .UsingDataverseManyToManyRelationshipEntity(
+           joinTable: "account_other", 
+           rightForeignKey: "otherid", 
+           leftForeignKey: "accountid", 
+           navigationFromLeft: "account_others");
+```
+
 ## GetOptionsAsync
 
 Gettinge choice options for a property
