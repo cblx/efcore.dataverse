@@ -53,12 +53,17 @@ public static class DataverseDbSetExtensions {
 
     private static async Task<ChoiceOption[]> GetOptionsAsyncInternal<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity, TProperty>(
        IInfrastructure<IServiceProvider> set,
-       Expression<Func<TEntity, TProperty>> memberExpression) where TEntity : class
+       Expression<Func<TEntity, TProperty>> expression) where TEntity : class
     {
         var dbContext = set.GetService<ICurrentDbContext>().Context;
         var entityType = dbContext.Model.FindEntityType(typeof(TEntity))!;
         var tableName = entityType.GetTableName();
-        var memberInfo = (memberExpression.Body as MemberExpression)!.Member;
+        if(expression.Body is not MemberExpression memberExpression)
+        {
+            // Then it is some kind of unary
+            memberExpression = ((expression.Body as UnaryExpression)!.Operand as MemberExpression)!;
+        }
+        var memberInfo = memberExpression.Member;
         var columnName = entityType.FindProperty(memberInfo)!.GetColumnName();
 
         return await dbContext.Database.SqlQuery<ChoiceOption>($"""
