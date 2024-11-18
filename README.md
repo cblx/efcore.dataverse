@@ -39,7 +39,7 @@ entityBuilder.ToEntitySet("accounts");
 
 ## HasODataBindPropertyName
 
-When the entity has a relationship, the lib needs to know what's the navigaiton name to update the FK property.
+When the entity has a relationship, the lib needs to know what's the navigation name to update the FK property.
 
 Desired write body:
 
@@ -58,7 +58,7 @@ entityBuilder.Property(x => x.OtherEntityId)
 entityBuilder.HasOne(x => x.OtherEntity).WithMany().HasForeignKey(x => x.OtherEntityId);
 ```
 ### HasForeignEntitySet
-This is used when the FK has no correspondent Entity defined in them model:
+This is used when the FK has no correspondent Entity defined in the model:
 ```csharp
 entityBuilder.Property(x => x.OtherEntityId)
              .HasColumnName("other_entity")
