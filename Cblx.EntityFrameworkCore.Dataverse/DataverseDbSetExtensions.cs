@@ -15,15 +15,15 @@ public static class DataverseDbSetExtensions {
        | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicFields
        | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.Interfaces;
 
-    public static async Task<ChoiceOption[]> GetOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity>(
+    public static async Task<ChoiceOption[]> GetIntOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity>(
        this DbSet<TEntity> set,
-       Expression<Func<TEntity, object>> memberExpression)
+       Expression<Func<TEntity, object?>> memberExpression)
        where TEntity : class
     {
         return await GetOptionsAsyncInternal(set, memberExpression);
     }
 
-    public static async Task<ChoiceOption<TEnum>[]> GetOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity, TEnum>(
+    public static async Task<ChoiceOption<TEnum>[]> GetEnumOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity, TEnum>(
         this DbSet<TEntity> set,
         Expression<Func<TEntity, IEnumerable<TEnum>?>> memberExpression)
         where TEntity : class where TEnum : struct
@@ -32,7 +32,7 @@ public static class DataverseDbSetExtensions {
         return choices.Select(c => c.To<TEnum>()).ToArray();
     }
 
-    public static async Task<ChoiceOption<TEnum>[]> GetOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity, TEnum>(
+    public static async Task<ChoiceOption<TEnum>[]> GetEnumOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity, TEnum>(
         this DbSet<TEntity> set,
         Expression<Func<TEntity, TEnum?>> memberExpression)
         where TEntity : class where TEnum : struct
@@ -41,7 +41,7 @@ public static class DataverseDbSetExtensions {
         return choices.Select(c => c.To<TEnum>()).ToArray();
     }
 
-    public static async Task<ChoiceOption<TEnum>[]> GetOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity, TEnum>(
+    public static async Task<ChoiceOption<TEnum>[]> GetEnumOptionsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes)] TEntity, TEnum>(
         this DbSet<TEntity> set,
         Expression<Func<TEntity, TEnum>> memberExpression)
         where TEntity : class where TEnum : struct
