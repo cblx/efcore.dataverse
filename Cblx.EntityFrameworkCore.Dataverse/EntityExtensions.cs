@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using System.Linq.Expressions;
 
 namespace Cblx.EntityFrameworkCore.Dataverse;
 
@@ -24,12 +25,13 @@ public static class EntityExtensions
     /// <param name="property"></param>
     /// <param name="value"></param>
     /// <returns></returns>
-    public static PropertyBuilder<T> HasODataBindPropertyName<T>(this PropertyBuilder<T> property, string value)
+    public static PropertyBuilder<T> HasODataBindPropertyName<T>(this PropertyBuilder<T> property, string value) // Change to HasDataverseNavigationName("thing") ?
     {
         property.Metadata.AddAnnotation("ODataBindPropertyName", value);
         return property;
     }
 
+  
     /// <summary>
     /// Define the navigation name when saving this relationship through odata.bind attribute.
     /// </summary>

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -12,7 +13,7 @@ namespace Cblx.EntityFrameworkCore.Dataverse;
 
 public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 {
-   
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var loggingOptions = this.GetService<ILoggingOptions>();
@@ -46,11 +47,11 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 $"'{GetType().Name}' created a request message content for updating a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
             )
         );
-        if(request == null) { return 0; }
+        if (request == null) { return 0; }
         var response = await httpClient!.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            Log(DataverseEventId.BatchRequestFailed, 
+            Log(DataverseEventId.BatchRequestFailed,
                 loggingOptions.IsSensitiveDataLoggingEnabled ?
                 $"""
                 '{GetType().Name}' batch request for saving changes has failed.
@@ -76,7 +77,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
             }
             throw new DbUpdateException(message);
         }
-        Log(DataverseEventId.BatchRequestSucceeded, 
+        Log(DataverseEventId.BatchRequestSucceeded,
             loggingOptions.IsSensitiveDataLoggingEnabled ?
             $"""
             Context '{GetType().Name}' successfully completed batch request for saving changes.
@@ -143,6 +144,17 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         deleted = deleted.Except(deletedManyToManyRelationships).ToArray();
         foreach (var entry in deleted)
         {
+            if (entry.Metadata.FindAnnotation(nameof(ODataBindManyToManyData))?.Value is ODataBindManyToManyData oDataBindManyToManyData)
+            {
+                DeleteWeakManyToManyRel(httpClient,
+                           oDataBindManyToManyData,
+                           entry,
+                           changeSetContent,
+                           onDeletedContentCreated,
+                           contentId++);
+                continue;
+            }
+
             var httpMessageContent = CreateHttpMessageContent(httpClient, HttpMethod.Delete, contentId++, entry);
             changeSetContent.Add(httpMessageContent);
             onDeletedContentCreated?.Invoke(entry, httpMessageContent);
@@ -152,6 +164,17 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         added = added.Except(addedManyToManyRelationships).ToArray();
         foreach (var entry in added)
         {
+            if (entry.Metadata.FindAnnotation(nameof(ODataBindManyToManyData))?.Value is ODataBindManyToManyData oDataBindManyToManyData)
+            {
+                AddWeakManyToManyRel(httpClient,
+                           oDataBindManyToManyData,
+                           entry,
+                           changeSetContent,
+                           onAddedContentCreated,
+                           contentId++);
+                continue;
+            }
+
             var properties = GetPropertiesRecusively(entry)
                 .Where(p => p.CurrentValue != p.Metadata.GetDefaultValue())
                 .Where(p => !p.IsDataverseReadOnly())
@@ -210,6 +233,58 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         batchContent.Add(changeSetContent);
         request.Content = batchContent;
         return request;
+    }
+
+    private void DeleteWeakManyToManyRel(HttpClient httpClient,
+                            ODataBindManyToManyData oDataBindManyToManyData,
+                            EntityEntry entry,
+                            MultipartContent changeSetContent,
+                            Action<EntityEntry, HttpMessageContent>? onDeletedContentCreated,
+                            int contentId)
+    {
+        var principalEntityType = Model.GetEntityTypes().First(entity => entity.ClrType == oDataBindManyToManyData.PrincipalType);
+        var principalEntitySet = principalEntityType.GetEntitySetName();
+        var navigation = principalEntityType.FindNavigation(oDataBindManyToManyData.PrincipalNavigationPropertyName);
+        var fkToParentName = navigation.ForeignKey.Properties[0].Name;
+        var fkToParentValue = entry.Property(fkToParentName).CurrentValue;
+        var targetEntityId = entry.Property(oDataBindManyToManyData.RelForeignKeyToTarget.Member.Name);
+        var path = $"{httpClient.BaseAddress}{principalEntitySet}({fkToParentValue})/{oDataBindManyToManyData.PrincipalNavigationLogicalName}({targetEntityId.CurrentValue})/$ref";
+        var httpRequestMessage = new HttpRequestMessage(HttpMethod.Delete, path);
+        var httpMessageContent = new HttpMessageContent(httpRequestMessage);
+        httpMessageContent.Headers.ContentType = new MediaTypeHeaderValue("application/http");
+        httpMessageContent.Headers.Add("Content-Transfer-Encoding", "binary");
+        httpMessageContent.Headers.Add("Content-ID", contentId.ToString());
+        changeSetContent.Add(httpMessageContent);
+        onDeletedContentCreated?.Invoke(entry, httpMessageContent);
+    }
+
+    private void AddWeakManyToManyRel(HttpClient httpClient, 
+                            ODataBindManyToManyData oDataBindManyToManyData,
+                            EntityEntry entry,
+                            MultipartContent changeSetContent,
+                            Action<EntityEntry, HttpMessageContent, string>? onAddedContentCreated,
+                            int contentId)
+    {
+        var principalEntityType = Model.GetEntityTypes().First(entity => entity.ClrType == oDataBindManyToManyData.PrincipalType);
+        var principalEntitySet = principalEntityType.GetEntitySetName();
+        var navigation = principalEntityType.FindNavigation(oDataBindManyToManyData.PrincipalNavigationPropertyName);
+        var fkToParentName = navigation.ForeignKey.Properties[0].Name;
+        var fkToParentValue = entry.Property(fkToParentName).CurrentValue;
+        var path = $"{httpClient.BaseAddress}{principalEntitySet}({fkToParentValue})/{oDataBindManyToManyData.PrincipalNavigationLogicalName}/$ref";
+        var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, path);
+        var httpMessageContent = new HttpMessageContent(httpRequestMessage);
+        httpMessageContent.Headers.ContentType = new MediaTypeHeaderValue("application/http");
+        httpMessageContent.Headers.Add("Content-Transfer-Encoding", "binary");
+        httpMessageContent.Headers.Add("Content-ID", contentId.ToString());
+        var targetEntityId = entry.Property(oDataBindManyToManyData.RelForeignKeyToTarget.Member.Name);
+        var json = $$"""
+                {
+                    "@odata.id": "{{httpClient.BaseAddress}}{{oDataBindManyToManyData.TargetEntitySet}}({{targetEntityId.CurrentValue}})"
+                }
+                """;
+        httpRequestMessage.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        changeSetContent.Add(httpMessageContent);
+        onAddedContentCreated?.Invoke(entry, httpMessageContent, json);
     }
 
     private static HttpMessageContent CreateHttpMessageContent(
