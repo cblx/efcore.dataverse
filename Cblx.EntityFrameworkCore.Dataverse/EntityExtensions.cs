@@ -100,12 +100,24 @@ public static class EntityExtensions
     }
 
     public static string GetEntitySetName(this IEntityType entityType)
-        => entityType.FindAnnotation("entitySetName")?.Value?.ToString()
-            ?? entityType.GetTableName() 
-               // I don't really know if GetTableName can return null values at this point.
-               // If it is possible, we should add a better explanation here, and how the user can fix it.
-               ?? throw new InvalidOperationException($"EntitySetName could not be resolved for {entityType.Name}.");
-   
+    {
+        var entitySetName = entityType.FindAnnotation("entitySetName")?.Value?.ToString();
+        if (entitySetName is not null)
+        {
+            return entitySetName;
+        }
+        if ((entityType.GetMappingStrategy() ?? RelationalAnnotationNames.TphMappingStrategy)
+           == RelationalAnnotationNames.TphMappingStrategy
+           && entityType.BaseType != null)
+        {
+            return entityType.GetRootType().GetEntitySetName();
+        }
+        return entityType.GetTableName()
+            // I don't really know if GetTableName can return null values at this point.
+            // If it is possible, we should add a better explanation here, and how the user can fix it.
+            ?? throw new InvalidOperationException($"EntitySetName could not be resolved for {entityType.Name}.");
+    }
+
     internal static string? GetForeignEntitySet(this PropertyEntry property)
     {
         var value = property.Metadata.FindAnnotation("ForeignEntitySet")?.Value?.ToString();
