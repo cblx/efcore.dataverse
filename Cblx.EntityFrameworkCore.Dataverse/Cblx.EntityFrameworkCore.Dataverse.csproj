@@ -24,13 +24,16 @@
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.10" />
-		<!-- Don't remeber the reason for this explicit reference. 
-		 This ones already exists in EFCore but with a lower version:
+		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.0" />
+		<!-- 
+		 This explicit reference is needed because of this: https://stackoverflow.com/questions/78325276/package-azure-identity-v1-11-0-and-above-caused-an-error-with-sqlclient-and-dyna#comment139503927_78325276
+		
+	     This ones already exists in EFCore but with a lower version:
 		 Microsoft.EntityFrameworkCore.SqlServer (8.0.3) > Microsoft.Data.SqlClient (5.1.5) > Azure.Identity (1.10.3) > Microsoft.Identity.Client (4.56.0)
-		 OBS: Actually now we're using EFCore 8.0.10, it already uses Microsoft.Identity.Client 4.66.1, so I think this reference is not needed anymore.
-		 -->
 		 
+		 I think we can remove it when EF itself updates the Azure.Identiy version to 1.13.0 (I think it uses Micrisoft.Identity.Client 4.66.1 internally).
+		 EF 9.0 is currently using Azure.Identity 1.11.4.
+		 -->
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.66.1" />
 	</ItemGroup>
 
