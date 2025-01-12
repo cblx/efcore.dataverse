@@ -81,7 +81,7 @@ public class DataverseOptionsExtension : IDbContextOptionsExtension
     {
         services.AddHttpClient(HttpClientName!, client =>
         {
-            client.BaseAddress = new Uri($"{ResourceUrl}api/data/v9.2/");
+            client.BaseAddress = new Uri($"{ResourceUrl}{Consts.ApiDataPath}");
             if (HttpRequestTimeout.HasValue)
             {
                 client.Timeout = HttpRequestTimeout.Value;
