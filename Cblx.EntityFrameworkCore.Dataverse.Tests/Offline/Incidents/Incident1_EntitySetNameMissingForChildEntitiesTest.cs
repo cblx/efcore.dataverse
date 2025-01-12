@@ -9,9 +9,10 @@ public class Incident1_EntitySetNameMissingForChildEntitiesTest
         await using var db = new TestDbContext(builder.Options);
         var childEntity = new ChildEntity();
         db.Add(childEntity);
-        var batch = await db.GetBatchCommandForAssertionAsync(); batch.Should().Be($$"""
+        var batch = db.GetBatchCommandForAssertion(); 
+        batch.Should().Be($$"""
             --batch_00000000-0000-0000-0000-000000000000
-            Content-Type: multipart/mixed; boundary="changeset_00000000-0000-0000-0000-000000000000"
+            Content-Type: multipart/mixed; boundary=changeset_00000000-0000-0000-0000-000000000000
 
             --changeset_00000000-0000-0000-0000-000000000000
             Content-Type: application/http
@@ -19,9 +20,7 @@ public class Incident1_EntitySetNameMissingForChildEntitiesTest
             Content-ID: 0
 
             POST /api/data/v9.2/baseentities HTTP/1.1
-            Host: fake.api.crm.dynamics.com
-            Content-Type: application/json; charset=utf-8
-            Content-Length: 72
+            Content-Type: application/json
 
             {
                 "Id": "{{childEntity.Id}}",
