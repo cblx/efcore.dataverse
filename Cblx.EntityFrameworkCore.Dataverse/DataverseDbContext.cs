@@ -242,7 +242,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 {ContentDeleteAction(path)}
                 """;
             //changeSetContent.Add(httpMessageContent);
-            sbBatch.AppendLine(requestContent);
+            sbBatch.Append(requestContent);
             //onDeletedContentCreated?.Invoke(deletedRelationship, requestContent);
         }
         deleted = deleted.Except(deletedManyToManyRelationships).ToArray();
@@ -262,7 +262,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {ContentHeader(changeSetId, contentId++)}
                     {ContentDeleteAction(path)}
                     """;
-                sbBatch.AppendLine(requestContent);
+                sbBatch.Append(requestContent);
                 //onDeletedContentCreated?.Invoke(entry, requestContent);
             }
             else
@@ -273,7 +273,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {ContentHeader(changeSetId, contentId++)}
                     {ContentDeleteAction($"{entry.Metadata.GetEntitySetName()}({primaryKeyValue})")}
                     """;
-                sbBatch.AppendLine(requestContent);
+                sbBatch.Append(requestContent);
                 //onDeletedContentCreated?.Invoke(entry, requestContent);
             }
 
@@ -306,7 +306,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {{ContentHeader(changeSetId, contentId++)}}
                     {{ContentPostAction(path, body)}}
                     """;
-                sbBatch.AppendLine(requestContent);
+                sbBatch.Append(requestContent);
                 //onAddedContentCreated?.Invoke(entry, requestContent);
             }
             else
@@ -324,7 +324,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {{ContentHeader(changeSetId, contentId++)}}
                     {{ContentPostAction(entry.Metadata.GetEntitySetName(), json)}}
                     """;
-                sbBatch.AppendLine(requestContent);
+                sbBatch.Append(requestContent);
                 //onAddedContentCreated?.Invoke(entry, requestContent);
 
                 //var httpMessageContent = CreateHttpMessageContent(
@@ -357,7 +357,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 {{ContentHeader(changeSetId, contentId++)}}
                 {{ContentPostAction(path, body)}}
                 """;
-            sbBatch.AppendLine(requestContent);
+            sbBatch.Append(requestContent);
             //onAddedContentCreated?.Invoke(addedRelationship, requestContent);
 
             //var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, path);
@@ -390,7 +390,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 {{ContentHeader(changeSetId, contentId++)}}
                 {{ContentPatchAction(path, json)}}
                 """;
-            sbBatch.AppendLine(requestContent);
+            sbBatch.Append(requestContent);
             //onModifiedContentCreated?.Invoke(entry, requestContent);
             //var httpMessageContent = CreateHttpMessageContent(
             //    httpClient,
@@ -403,10 +403,11 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         //batchContent.Add(changeSetContent);
         //request.Content = batchContent;
 
-        sbBatch.AppendLine($"""
+        sbBatch.Append($"""
             --changeset_{changeSetId}--
 
             --batch_{batchId}--
+
             """);
 
         return sbBatch.ToString();
@@ -416,18 +417,21 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
     private static string ContentDeleteAction(string path) => $"""
         DELETE {GetRelativePath(path)} HTTP/1.1
 
+
         """;
     private static string ContentPostAction(string path, string body) => $"""
         POST {GetRelativePath(path)} HTTP/1.1
         Content-Type: application/json
 
         {body}
+
         """;
     private static string ContentPatchAction(string path, string body) => $"""
         PATCH {GetRelativePath(path)} HTTP/1.1
         Content-Type: application/json
 
         {body}
+
         """;
 
     private static string ContentHeader(Guid changeSetId, int contentId) => $"""
