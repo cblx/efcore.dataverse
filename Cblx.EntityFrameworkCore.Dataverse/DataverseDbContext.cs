@@ -54,37 +54,37 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var batchId = Guid.NewGuid();
         var batchContent = CreateBatchContent(
             batchId, 
-            httpClient.BaseAddress?.ToString() ?? "",
-            onDeletedContentCreated: (entry, requestContent) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
-                loggingOptions.IsSensitiveDataLoggingEnabled ?
-                $"""
-                '{GetType().Name}' created a request message content for deleting a '{entry.Metadata.ShortName()}' entity.
+            httpClient.BaseAddress?.ToString() ?? "" //,
+            //onDeletedContentCreated: (entry, requestContent) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
+            //    loggingOptions.IsSensitiveDataLoggingEnabled ?
+            //    $"""
+            //    '{GetType().Name}' created a request message content for deleting a '{entry.Metadata.ShortName()}' entity.
 
-                {requestContent}
+            //    {requestContent}
 
-                """ :
-                $"'{GetType().Name}' created a request message content for deleting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
-            ),
-            onAddedContentCreated: (entry, requestContent) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
-                loggingOptions.IsSensitiveDataLoggingEnabled ?
-                $"""
-                '{GetType().Name}' created a request message content for inserting a '{entry.Metadata.ShortName()}' entity.
+            //    """ :
+            //    $"'{GetType().Name}' created a request message content for deleting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
+            //),
+            //onAddedContentCreated: (entry, requestContent) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
+            //    loggingOptions.IsSensitiveDataLoggingEnabled ?
+            //    $"""
+            //    '{GetType().Name}' created a request message content for inserting a '{entry.Metadata.ShortName()}' entity.
 
-                {requestContent}
+            //    {requestContent}
 
-                """ :
-                $"'{GetType().Name}' created a request message content for inserting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
-            ),
-            onModifiedContentCreated: (entry, requestContent) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
-                loggingOptions.IsSensitiveDataLoggingEnabled ?
-                $"""
-                '{GetType().Name}' created a request message content for updating a '{entry.Metadata.ShortName()}' entity.
+            //    """ :
+            //    $"'{GetType().Name}' created a request message content for inserting a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
+            //),
+            //onModifiedContentCreated: (entry, requestContent) => Log(DataverseEventId.CreatingBatchRequestMessageContentItem,
+            //    loggingOptions.IsSensitiveDataLoggingEnabled ?
+            //    $"""
+            //    '{GetType().Name}' created a request message content for updating a '{entry.Metadata.ShortName()}' entity.
 
-                {requestContent}
+            //    {requestContent}
 
-                """ :
-                $"'{GetType().Name}' created a request message content for updating a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
-            )
+            //    """ :
+            //    $"'{GetType().Name}' created a request message content for updating a '{entry.Metadata.ShortName()}' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values."
+            //)
         );
         if (batchContent == null) { return 0; } // Won't happen... review?
         Log(DataverseEventId.SendingBatchRequest,
@@ -92,7 +92,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     $"""
                     Context '{GetType().Name}' is sending the following batch request:
                     {batchContent}
-                    """ : $"Context '{GetType().Name}' is sending a batch request.");
+                    """ : $"Context '{GetType().Name}' is sending a batch request. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see all values.");
         var response = await httpClient.PostAsync(
             "$batch", 
             new StringContent(batchContent, Encoding.UTF8, new MediaTypeHeaderValue("multipart/mixed")
@@ -195,9 +195,9 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
       Guid batchId,
       string baseAddress,
       // TODO: should we put it back inside the method?
-      Action<EntityEntry, string>? onDeletedContentCreated = null,
-      Action<EntityEntry, string>? onAddedContentCreated = null,
-      Action<EntityEntry, string>? onModifiedContentCreated = null,
+      //Action<EntityEntry, string>? onDeletedContentCreated = null,
+      //Action<EntityEntry, string>? onAddedContentCreated = null,
+      //Action<EntityEntry, string>? onModifiedContentCreated = null,
       Func<Guid>? guidCreator = null)
     {
         guidCreator ??= Guid.NewGuid;
@@ -243,7 +243,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 """;
             //changeSetContent.Add(httpMessageContent);
             sbBatch.AppendLine(requestContent);
-            onDeletedContentCreated?.Invoke(deletedRelationship, requestContent);
+            //onDeletedContentCreated?.Invoke(deletedRelationship, requestContent);
         }
         deleted = deleted.Except(deletedManyToManyRelationships).ToArray();
         foreach (var entry in deleted)
@@ -263,7 +263,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {ContentDeleteAction(path)}
                     """;
                 sbBatch.AppendLine(requestContent);
-                onDeletedContentCreated?.Invoke(entry, requestContent);
+                //onDeletedContentCreated?.Invoke(entry, requestContent);
             }
             else
             {
@@ -274,7 +274,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {ContentDeleteAction($"{entry.Metadata.GetEntitySetName()}({primaryKeyValue})")}
                     """;
                 sbBatch.AppendLine(requestContent);
-                onDeletedContentCreated?.Invoke(entry, requestContent);
+                //onDeletedContentCreated?.Invoke(entry, requestContent);
             }
 
             //var httpMessageContent = CreateHttpMessageContent(httpClient, HttpMethod.Delete, contentId++, entry);
@@ -307,7 +307,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {{ContentPostAction(path, body)}}
                     """;
                 sbBatch.AppendLine(requestContent);
-                onAddedContentCreated?.Invoke(entry, requestContent);
+                //onAddedContentCreated?.Invoke(entry, requestContent);
             }
             else
             {
@@ -325,7 +325,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                     {{ContentPostAction(entry.Metadata.GetEntitySetName(), json)}}
                     """;
                 sbBatch.AppendLine(requestContent);
-                onAddedContentCreated?.Invoke(entry, requestContent);
+                //onAddedContentCreated?.Invoke(entry, requestContent);
 
                 //var httpMessageContent = CreateHttpMessageContent(
                 //    httpClient,
@@ -358,7 +358,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 {{ContentPostAction(path, body)}}
                 """;
             sbBatch.AppendLine(requestContent);
-            onAddedContentCreated?.Invoke(addedRelationship, requestContent);
+            //onAddedContentCreated?.Invoke(addedRelationship, requestContent);
 
             //var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, path);
             //var httpMessageContent = new HttpMessageContent(httpRequestMessage);
@@ -391,7 +391,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 {{ContentPatchAction(path, json)}}
                 """;
             sbBatch.AppendLine(requestContent);
-            onModifiedContentCreated?.Invoke(entry, requestContent);
+            //onModifiedContentCreated?.Invoke(entry, requestContent);
             //var httpMessageContent = CreateHttpMessageContent(
             //    httpClient,
             //    HttpMethod.Patch,
