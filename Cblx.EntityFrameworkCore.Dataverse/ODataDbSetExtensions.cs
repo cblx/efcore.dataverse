@@ -52,6 +52,11 @@ public static class ODataDbSetExtensions
                 var columnName = property.GetColumnName();
                 if (item![columnName] is JsonValue jsonValue)
                 {
+                    // This will happen with shadow properties
+                    if (property.PropertyInfo is null)
+                    {
+                        continue;
+                    }
                     property.PropertyInfo!.SetValue(entity, jsonValue.Deserialize(property.ClrType));
                 }
             }
