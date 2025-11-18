@@ -6,6 +6,7 @@
 //using System.Threading.Tasks;
 
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 
 namespace Cblx.EntityFrameworkCore.Dataverse.OData;
 public class FromODataBuilder<TEntity> where TEntity : class
@@ -15,9 +16,15 @@ public class FromODataBuilder<TEntity> where TEntity : class
 
     internal FromODataBuilder(DataverseDbContext db, DbSet<TEntity> entityDbSet)
     {
-        this._db = db;
-        this._entityDbSet = entityDbSet;
+        _db = db;
+        _entityDbSet = entityDbSet;
     }
+
+    //public FromODataBuilder<TEntity, TProperty> Filter<TProperty>(Expression<Func<TEntity, TProperty>> memberExpression)
+    //{
+
+    //    return this;
+    //}
 
     public async Task<TEntity[]> ToArrayAsync()
     {
