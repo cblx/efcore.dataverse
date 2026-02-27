@@ -118,7 +118,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
                 var multiPartResponseString = await response.Content.ReadAsStringAsync(cancellationToken);
 
                 /*
-                 EXAMPLE OF AN ERROR MESSAGEM
+                 EXAMPLE OF AN ERROR MESSAGE
                 --batchresponse_b4c45a7a-bf5c-40ac-8911-8e8a1d5c4a6e
                 Content-Type: multipart/mixed; boundary=changesetresponse_77a8eaf7-e71a-44fe-a96f-d8c9bb55dec0
 
