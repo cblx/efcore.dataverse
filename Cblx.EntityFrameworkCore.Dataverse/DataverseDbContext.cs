@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -13,7 +14,10 @@ namespace Cblx.EntityFrameworkCore.Dataverse;
 
 public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 {
-
+    public override EntityEntry Add(object entity)
+    {
+        return base.Add(entity);
+    }
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var loggingOptions = this.GetService<ILoggingOptions>();
@@ -207,10 +211,8 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
             return null;
         }
 
-        //httpClient = CreateHttpClient();
         var request = CreateBatchRequest();
         var entries = ChangeTracker.Entries().ToArray();
-        //var batchContent = new MultipartContent("mixed", $"batch_{guidCreator()}");
         var changeSetId = guidCreator();
         var sbBatch = new StringBuilder($"""
             --batch_{batchId}
@@ -285,6 +287,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var added = entries.Where(e => e.State == EntityState.Added).ToArray();
         var addedManyToManyRelationships = added.Where(d => d.Metadata.IsManyToManyJoinEntity()).ToArray();
         added = added.Except(addedManyToManyRelationships).ToArray();
+        added = FkOnlyEntryOrderer.OrderAddedByForeignKeysOnly(added);
         foreach (var entry in added)
         {
             if (entry.Metadata.FindAnnotation(nameof(ODataBindManyToManyData))?.Value is ODataBindManyToManyData oDataBindManyToManyData)
@@ -775,5 +778,156 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var httpClientFactory = this.GetService<IHttpClientFactory>();
         var httpClient = httpClientFactory!.CreateClient(extension.HttpClientName!);
         return httpClient;
+    }
+}
+
+
+file static class FkOnlyEntryOrderer
+{
+    /// <summary>
+    /// Orders Added entries so principals are placed before dependents
+    /// </summary>
+    public static EntityEntry[] OrderAddedByForeignKeysOnly(EntityEntry[] addedEntries)
+    {
+        // Build index of Added principals by (EntityType, PrimaryKeyValues)
+        var principalByPk = new Dictionary<EntityKey, EntityEntry>(EntityKey.Comparer);
+
+        foreach (var e in addedEntries)
+        {
+            var pk = e.Metadata.FindPrimaryKey();
+            if (pk is null) continue;
+
+            var pkValues = GetCurrentValues(e, pk.Properties);
+            if (pkValues is null) continue; // ignore if PK incomplete / nulls
+
+            principalByPk[new EntityKey(e.Metadata, pkValues)] = e;
+        }
+
+        // Graph: principal -> dependents
+        var outgoing = addedEntries.ToDictionary(e => e, _ => new HashSet<EntityEntry>());
+        var indegree = addedEntries.ToDictionary(e => e, _ => 0);
+
+        foreach (var dependent in addedEntries)
+        {
+            foreach (var fk in dependent.Metadata.GetForeignKeys())
+            {
+                // FK properties live on dependent; principal key is usually the principal PK (or alternate key)
+                var fkValues = GetCurrentValues(dependent, fk.Properties);
+                if (fkValues is null) continue; // FK not fully set
+
+                var principalType = fk.PrincipalEntityType;
+
+                // Match dependent.FK values to principal key values
+                if (principalByPk.TryGetValue(new EntityKey(principalType, fkValues), out var principal))
+                {
+                    // principal must come before dependent
+                    if (outgoing[principal].Add(dependent))
+                        indegree[dependent]++;
+                }
+            }
+        }
+
+        // Topological sort (Kahn)
+        var ready = new List<EntityEntry>(indegree.Where(kv => kv.Value == 0).Select(kv => kv.Key));
+        SortDeterministically(ready);
+
+        var result = new List<EntityEntry>(addedEntries.Length);
+
+        while (ready.Count > 0)
+        {
+            var n = ready[0];
+            ready.RemoveAt(0);
+            result.Add(n);
+
+            foreach (var m in outgoing[n])
+            {
+                indegree[m]--;
+                if (indegree[m] == 0)
+                {
+                    ready.Add(m);
+                    SortDeterministically(ready);
+                }
+            }
+        }
+
+        if (result.Count == addedEntries.Length)
+            return result.ToArray();
+
+        // Cycle (or missing PK info) => no strict FK-based order exists for all nodes.
+        // Append remaining nodes deterministically at the end.
+        var remaining = addedEntries.Except(result).ToList();
+        SortDeterministically(remaining);
+        result.AddRange(remaining);
+        return result.ToArray();
+    }
+
+    private static object?[]? GetCurrentValues(EntityEntry entry, IReadOnlyList<IProperty> properties)
+    {
+        var values = new object?[properties.Count];
+        for (int i = 0; i < properties.Count; i++)
+        {
+            var v = entry.Property(properties[i].Name).CurrentValue;
+            if (v is null) return null; // require all parts filled
+            values[i] = v;
+        }
+        return values;
+    }
+
+    /// <summary>
+    /// Deterministic ordering for stable output when multiple nodes are available.
+    /// Uses EntityType name + primary key values (if available).
+    /// </summary>
+    private static void SortDeterministically(List<EntityEntry> list)
+    {
+        list.Sort((a, b) =>
+        {
+            var c = string.CompareOrdinal(a.Metadata.Name, b.Metadata.Name);
+            if (c != 0) return c;
+
+            var apk = TryGetPkString(a);
+            var bpk = TryGetPkString(b);
+            return string.CompareOrdinal(apk, bpk);
+        });
+    }
+
+    private static string TryGetPkString(EntityEntry e)
+    {
+        var pk = e.Metadata.FindPrimaryKey();
+        if (pk is null) return "";
+
+        var parts = new List<string>(pk.Properties.Count);
+        foreach (var p in pk.Properties)
+        {
+            var v = e.Property(p.Name).CurrentValue;
+            parts.Add(v?.ToString() ?? "");
+        }
+        return string.Join("|", parts);
+    }
+
+    private readonly record struct EntityKey(IEntityType EntityType, object?[] KeyValues)
+    {
+        public static IEqualityComparer<EntityKey> Comparer { get; } = new KeyComparer();
+
+        private sealed class KeyComparer : IEqualityComparer<EntityKey>
+        {
+            public bool Equals(EntityKey x, EntityKey y)
+            {
+                if (!ReferenceEquals(x.EntityType, y.EntityType)) return false;
+                if (x.KeyValues.Length != y.KeyValues.Length) return false;
+
+                for (int i = 0; i < x.KeyValues.Length; i++)
+                    if (!Equals(x.KeyValues[i], y.KeyValues[i])) return false;
+
+                return true;
+            }
+
+            public int GetHashCode(EntityKey obj)
+            {
+                var h = obj.EntityType.GetHashCode();
+                foreach (var v in obj.KeyValues)
+                    h = (h * 397) ^ (v?.GetHashCode() ?? 0);
+                return h;
+            }
+        }
     }
 }
