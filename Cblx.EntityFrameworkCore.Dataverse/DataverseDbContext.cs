@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -14,10 +14,6 @@ namespace Cblx.EntityFrameworkCore.Dataverse;
 
 public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 {
-    public override EntityEntry Add(object entity)
-    {
-        return base.Add(entity);
-    }
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var loggingOptions = this.GetService<ILoggingOptions>();
@@ -785,10 +781,26 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 file static class FkOnlyEntryOrderer
 {
     /// <summary>
-    /// Orders Added entries so principals are placed before dependents
+    /// Orders Added entries so principals are placed before dependents.
+    ///
+    /// Determinism goal:
+    /// - Preserve the input order (snapshot order of addedEntries) whenever there is a tie.
+    /// - This makes the resulting command/batch sequence stable for tests, given the same addedEntries snapshot.
+    ///
+    /// Notes:
+    /// - addedEntries is expected to be a snapshot (e.g. ChangeTracker.Entries().Where(...).ToArray()).
+    /// - This does NOT guarantee "order of Add calls"; it guarantees stable output for a given input order.
     /// </summary>
     public static EntityEntry[] OrderAddedByForeignKeysOnly(EntityEntry[] addedEntries)
     {
+        if (addedEntries is null) throw new ArgumentNullException(nameof(addedEntries));
+
+        // Tie-breaker index: preserve the input order whenever multiple nodes are ready.
+        // Use reference equality because EntityEntry does not have a useful value equality for dictionary keys here.
+        var orderIndex = new Dictionary<EntityEntry, int>(ReferenceEqualityComparer<EntityEntry>.Instance);
+        for (int i = 0; i < addedEntries.Length; i++)
+            orderIndex[addedEntries[i]] = i;
+
         // Build index of Added principals by (EntityType, PrimaryKeyValues)
         var principalByPk = new Dictionary<EntityKey, EntityEntry>(EntityKey.Comparer);
 
@@ -804,8 +816,14 @@ file static class FkOnlyEntryOrderer
         }
 
         // Graph: principal -> dependents
-        var outgoing = addedEntries.ToDictionary(e => e, _ => new HashSet<EntityEntry>());
-        var indegree = addedEntries.ToDictionary(e => e, _ => 0);
+        var outgoing = new Dictionary<EntityEntry, HashSet<EntityEntry>>(ReferenceEqualityComparer<EntityEntry>.Instance);
+        var indegree = new Dictionary<EntityEntry, int>(ReferenceEqualityComparer<EntityEntry>.Instance);
+
+        foreach (var e in addedEntries)
+        {
+            outgoing[e] = new HashSet<EntityEntry>(ReferenceEqualityComparer<EntityEntry>.Instance);
+            indegree[e] = 0;
+        }
 
         foreach (var dependent in addedEntries)
         {
@@ -828,8 +846,8 @@ file static class FkOnlyEntryOrderer
         }
 
         // Topological sort (Kahn)
-        var ready = new List<EntityEntry>(indegree.Where(kv => kv.Value == 0).Select(kv => kv.Key));
-        SortDeterministically(ready);
+        var ready = indegree.Where(kv => kv.Value == 0).Select(kv => kv.Key).ToList();
+        SortBySnapshotOrder(ready, orderIndex);
 
         var result = new List<EntityEntry>(addedEntries.Length);
 
@@ -839,13 +857,18 @@ file static class FkOnlyEntryOrderer
             ready.RemoveAt(0);
             result.Add(n);
 
-            foreach (var m in outgoing[n])
+            // Iterate dependents in snapshot order too (HashSet doesn't preserve order)
+            // so we sort them by orderIndex before consuming.
+            var dependents = outgoing[n].ToList();
+            SortBySnapshotOrder(dependents, orderIndex);
+
+            foreach (var m in dependents)
             {
                 indegree[m]--;
                 if (indegree[m] == 0)
                 {
                     ready.Add(m);
-                    SortDeterministically(ready);
+                    SortBySnapshotOrder(ready, orderIndex);
                 }
             }
         }
@@ -854,9 +877,9 @@ file static class FkOnlyEntryOrderer
             return result.ToArray();
 
         // Cycle (or missing PK info) => no strict FK-based order exists for all nodes.
-        // Append remaining nodes deterministically at the end.
+        // Append remaining nodes in snapshot order (stable for tests).
         var remaining = addedEntries.Except(result).ToList();
-        SortDeterministically(remaining);
+        SortBySnapshotOrder(remaining, orderIndex);
         result.AddRange(remaining);
         return result.ToArray();
     }
@@ -874,34 +897,11 @@ file static class FkOnlyEntryOrderer
     }
 
     /// <summary>
-    /// Deterministic ordering for stable output when multiple nodes are available.
-    /// Uses EntityType name + primary key values (if available).
+    /// Stable tie-breaker based on the input snapshot order.
     /// </summary>
-    private static void SortDeterministically(List<EntityEntry> list)
+    private static void SortBySnapshotOrder(List<EntityEntry> list, Dictionary<EntityEntry, int> orderIndex)
     {
-        list.Sort((a, b) =>
-        {
-            var c = string.CompareOrdinal(a.Metadata.Name, b.Metadata.Name);
-            if (c != 0) return c;
-
-            var apk = TryGetPkString(a);
-            var bpk = TryGetPkString(b);
-            return string.CompareOrdinal(apk, bpk);
-        });
-    }
-
-    private static string TryGetPkString(EntityEntry e)
-    {
-        var pk = e.Metadata.FindPrimaryKey();
-        if (pk is null) return "";
-
-        var parts = new List<string>(pk.Properties.Count);
-        foreach (var p in pk.Properties)
-        {
-            var v = e.Property(p.Name).CurrentValue;
-            parts.Add(v?.ToString() ?? "");
-        }
-        return string.Join("|", parts);
+        list.Sort((a, b) => orderIndex[a].CompareTo(orderIndex[b]));
     }
 
     private readonly record struct EntityKey(IEntityType EntityType, object?[] KeyValues)
@@ -929,5 +929,18 @@ file static class FkOnlyEntryOrderer
                 return h;
             }
         }
+    }
+
+    /// <summary>
+    /// Reference comparer helper (generic).
+    /// </summary>
+    private sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T>
+        where T : class
+    {
+        public static ReferenceEqualityComparer<T> Instance { get; } = new();
+
+        public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }
