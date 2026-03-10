@@ -2,9 +2,10 @@
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
-using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -13,7 +14,6 @@ namespace Cblx.EntityFrameworkCore.Dataverse;
 
 public class DataverseDbContext(DbContextOptions options) : DbContext(options)
 {
-
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var loggingOptions = this.GetService<ILoggingOptions>();
@@ -207,10 +207,8 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
             return null;
         }
 
-        //httpClient = CreateHttpClient();
         var request = CreateBatchRequest();
         var entries = ChangeTracker.Entries().ToArray();
-        //var batchContent = new MultipartContent("mixed", $"batch_{guidCreator()}");
         var changeSetId = guidCreator();
         var sbBatch = new StringBuilder($"""
             --batch_{batchId}
@@ -285,6 +283,7 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var added = entries.Where(e => e.State == EntityState.Added).ToArray();
         var addedManyToManyRelationships = added.Where(d => d.Metadata.IsManyToManyJoinEntity()).ToArray();
         added = added.Except(addedManyToManyRelationships).ToArray();
+        added = FkOnlyEntryOrderer.OrderAddedByForeignKeysOnly(added);
         foreach (var entry in added)
         {
             if (entry.Metadata.FindAnnotation(nameof(ODataBindManyToManyData))?.Value is ODataBindManyToManyData oDataBindManyToManyData)
@@ -775,5 +774,173 @@ public class DataverseDbContext(DbContextOptions options) : DbContext(options)
         var httpClientFactory = this.GetService<IHttpClientFactory>();
         var httpClient = httpClientFactory!.CreateClient(extension.HttpClientName!);
         return httpClient;
+    }
+}
+
+
+file static class FkOnlyEntryOrderer
+{
+    /// <summary>
+    /// Orders Added entries so principals are placed before dependents.
+    ///
+    /// Determinism goal:
+    /// - Preserve the input order (snapshot order of addedEntries) whenever there is a tie.
+    /// - This makes the resulting command/batch sequence stable for tests, given the same addedEntries snapshot.
+    ///
+    /// Notes:
+    /// - addedEntries is expected to be a snapshot (e.g. ChangeTracker.Entries().Where(...).ToArray()).
+    /// - This does NOT guarantee "order of Add calls"; it guarantees stable output for a given input order.
+    /// </summary>
+    public static EntityEntry[] OrderAddedByForeignKeysOnly(EntityEntry[] addedEntries)
+    {
+        if (addedEntries is null) throw new ArgumentNullException(nameof(addedEntries));
+
+        // Tie-breaker index: preserve the input order whenever multiple nodes are ready.
+        // Use reference equality because EntityEntry does not have a useful value equality for dictionary keys here.
+        var orderIndex = new Dictionary<EntityEntry, int>(ReferenceEqualityComparer<EntityEntry>.Instance);
+        for (int i = 0; i < addedEntries.Length; i++)
+            orderIndex[addedEntries[i]] = i;
+
+        // Build index of Added principals by (EntityType, PrimaryKeyValues)
+        var principalByPk = new Dictionary<EntityKey, EntityEntry>(EntityKey.Comparer);
+
+        foreach (var e in addedEntries)
+        {
+            var pk = e.Metadata.FindPrimaryKey();
+            if (pk is null) continue;
+
+            var pkValues = GetCurrentValues(e, pk.Properties);
+            if (pkValues is null) continue; // ignore if PK incomplete / nulls
+
+            principalByPk[new EntityKey(e.Metadata, pkValues)] = e;
+        }
+
+        // Graph: principal -> dependents
+        var outgoing = new Dictionary<EntityEntry, HashSet<EntityEntry>>(ReferenceEqualityComparer<EntityEntry>.Instance);
+        var indegree = new Dictionary<EntityEntry, int>(ReferenceEqualityComparer<EntityEntry>.Instance);
+
+        foreach (var e in addedEntries)
+        {
+            outgoing[e] = new HashSet<EntityEntry>(ReferenceEqualityComparer<EntityEntry>.Instance);
+            indegree[e] = 0;
+        }
+
+        foreach (var dependent in addedEntries)
+        {
+            foreach (var fk in dependent.Metadata.GetForeignKeys())
+            {
+                // FK properties live on dependent; principal key is usually the principal PK (or alternate key)
+                var fkValues = GetCurrentValues(dependent, fk.Properties);
+                if (fkValues is null) continue; // FK not fully set
+
+                var principalType = fk.PrincipalEntityType;
+
+                // Match dependent.FK values to principal key values
+                if (principalByPk.TryGetValue(new EntityKey(principalType, fkValues), out var principal))
+                {
+                    // principal must come before dependent
+                    if (outgoing[principal].Add(dependent))
+                        indegree[dependent]++;
+                }
+            }
+        }
+
+        // Topological sort (Kahn)
+        var ready = indegree.Where(kv => kv.Value == 0).Select(kv => kv.Key).ToList();
+        SortBySnapshotOrder(ready, orderIndex);
+
+        var result = new List<EntityEntry>(addedEntries.Length);
+
+        while (ready.Count > 0)
+        {
+            var n = ready[0];
+            ready.RemoveAt(0);
+            result.Add(n);
+
+            // Iterate dependents in snapshot order too (HashSet doesn't preserve order)
+            // so we sort them by orderIndex before consuming.
+            var dependents = outgoing[n].ToList();
+            SortBySnapshotOrder(dependents, orderIndex);
+
+            foreach (var m in dependents)
+            {
+                indegree[m]--;
+                if (indegree[m] == 0)
+                {
+                    ready.Add(m);
+                    SortBySnapshotOrder(ready, orderIndex);
+                }
+            }
+        }
+
+        if (result.Count == addedEntries.Length)
+            return result.ToArray();
+
+        // Cycle (or missing PK info) => no strict FK-based order exists for all nodes.
+        // Append remaining nodes in snapshot order (stable for tests).
+        var remaining = addedEntries.Except(result).ToList();
+        SortBySnapshotOrder(remaining, orderIndex);
+        result.AddRange(remaining);
+        return result.ToArray();
+    }
+
+    private static object?[]? GetCurrentValues(EntityEntry entry, IReadOnlyList<IProperty> properties)
+    {
+        var values = new object?[properties.Count];
+        for (int i = 0; i < properties.Count; i++)
+        {
+            var v = entry.Property(properties[i].Name).CurrentValue;
+            if (v is null) return null; // require all parts filled
+            values[i] = v;
+        }
+        return values;
+    }
+
+    /// <summary>
+    /// Stable tie-breaker based on the input snapshot order.
+    /// </summary>
+    private static void SortBySnapshotOrder(List<EntityEntry> list, Dictionary<EntityEntry, int> orderIndex)
+    {
+        list.Sort((a, b) => orderIndex[a].CompareTo(orderIndex[b]));
+    }
+
+    private readonly record struct EntityKey(IEntityType EntityType, object?[] KeyValues)
+    {
+        public static IEqualityComparer<EntityKey> Comparer { get; } = new KeyComparer();
+
+        private sealed class KeyComparer : IEqualityComparer<EntityKey>
+        {
+            public bool Equals(EntityKey x, EntityKey y)
+            {
+                if (!ReferenceEquals(x.EntityType, y.EntityType)) return false;
+                if (x.KeyValues.Length != y.KeyValues.Length) return false;
+
+                for (int i = 0; i < x.KeyValues.Length; i++)
+                    if (!Equals(x.KeyValues[i], y.KeyValues[i])) return false;
+
+                return true;
+            }
+
+            public int GetHashCode(EntityKey obj)
+            {
+                var h = obj.EntityType.GetHashCode();
+                foreach (var v in obj.KeyValues)
+                    h = (h * 397) ^ (v?.GetHashCode() ?? 0);
+                return h;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reference comparer helper (generic).
+    /// </summary>
+    private sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T>
+        where T : class
+    {
+        public static ReferenceEqualityComparer<T> Instance { get; } = new();
+
+        public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }
